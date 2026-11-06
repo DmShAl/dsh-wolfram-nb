@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Wolfram notebooks",
+    "description": "Calls the local Mathematica kernel and renders the notebook beside the conversation."
+  }
+}

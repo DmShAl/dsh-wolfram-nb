@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Wolfram 笔记本",
+    "description": "调用本地 Mathematica 内核进行计算，并在对话旁实时渲染笔记本。"
+  }
+}

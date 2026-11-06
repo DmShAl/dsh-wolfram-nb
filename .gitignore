@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Distribution artifacts
+dist/
+*.tgz
+
+# Plugin runtime data (inside a user workspace)
+.dsh-wolfram/
+wolfram-notebooks/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

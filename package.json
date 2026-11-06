@@ -1,0 +1,58 @@
+{
+  "name": "@nashihang777/dsh-wolfram-nb",
+  "version": "1.1.0",
+  "type": "module",
+  "description": "Wolfram Language tools and a live notebook panel for DeepSeek Harness. Requires a licensed local Mathematica installation.",
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "mathematica",
+    "wolfram-language",
+    "notebook"
+  ],
+  "homepage": "https://github.com/nashihang777/dsh-wolfram-nb#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nashihang777/dsh-wolfram-nb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nashihang777/dsh-wolfram-nb/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "kernel-discovery.js",
+    "bridge.wl",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  }
+}

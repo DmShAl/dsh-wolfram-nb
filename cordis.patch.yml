@@ -1,0 +1,5 @@
+- insert:
+    - id: wolfram-notebook
+      name: '@nashihang777/dsh-wolfram-nb'
+      config:
+        kernel: ''
