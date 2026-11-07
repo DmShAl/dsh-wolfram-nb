@@ -21,7 +21,7 @@ npm publish --registry=https://registry.npmjs.org
 
 会交互要求 OTP（如果账号开了 2FA），不需要创建长期令牌。
 
-### 2. 配置 Trusted Publisher
+### 2. 配置 Trusted Publisher（关键：权限要含 npm publish）
 
 npmjs.com → 包页面 → **Settings → Trusted publishing**（部分界面叫
 “Publishing access” / “Trusted publishers”）→ 添加 GitHub Actions：
@@ -32,11 +32,22 @@ npmjs.com → 包页面 → **Settings → Trusted publishing**（部分界面�
 | Repository | `dsh-wolfram-nb` |
 | Workflow filename | `publish.yml` |
 | Environment | 留空（除非你想用环境审批） |
+| **Permissions** | 必须勾选 **`npm publish`**（不能只勾 `npm stage publish`） |
 
-保存后，这个仓库的 `publish.yml` 就可以免令牌发布该包。
+> **这一步是 `403 OIDC permission denied` 的唯一常见原因。**
+> 引入 staged publishing 后，trust relationship 的权限是**按命令细分**的：短时令牌只能执行
+> 被授予的命令（`npm publish` 和/或 `npm stage publish`）。
+> 列表里显示 `Permissions: npm stage publish` 而**不含** `npm publish` 时，
+> CI 里的 `npm publish` 必然被拒，与 owner/repo/workflow 填得对不对无关。
 
-> 如果页面没有 Trusted publishing 入口，说明你的 npm 账号/组织还没放开该功能；
-> 退回到 granular token + `NPM_TOKEN` 的方式（见文末“备选方案”）。
+用 npm 12+ 的 CLI 也可以直接设置（本机 npm 11.9 没有该子命令）：
+
+```bash
+npx npm@latest trust github \
+  --repo nashihang777/dsh-wolfram-nb \
+  --file publish.yml \
+  --allow-publish
+```
 
 ### 3. 确认仓库与权限
 
@@ -71,13 +82,17 @@ GitHub → **Actions → publish → Run workflow**。只执行 `npm publish --d
 
 | 现象 | 原因 / 处理 |
 |---|---|
+| **`403 ... OIDC permission denied for this action`** | trust relationship **没有授予 `npm publish` 权限**（只给了 `npm stage publish`）。到 Trusted publishing 编辑该条目，勾上 `npm publish`；或用 `npx npm@latest trust github ... --allow-publish`。这是最常见原因，且日志里 provenance 会显示“签名成功”，容易误判成仓库配置错 |
 | `EOTP` / `two-factor authentication` | 首次手动发布需要 OTP；CI 发布不需要（OIDC） |
-| `403 Forbidden`、`404 Not Found` | Trusted Publisher 的 owner/repo/workflow 填写不一致，或 token 账号无 scope 权限 |
+| `403 Forbidden`、`404 Not Found`（无 OIDC 字样） | Trusted Publisher 的 owner/repo/workflow 填写不一致，或 token 账号无 scope 权限 |
 | `npm ERR! ... id-token` / OIDC 失败 | workflow 缺少 `id-token: write`，或运行在 self-hosted runner 上 |
 | `tag vX.Y.Z does not match package.json version` | 先 `npm version` 再打标签 |
 | `Cannot publish over existing version` | 版本号未递增；npm 不允许重复发布同一版本 |
 | `--provenance` 报错 | 仓库不是公开仓库；去掉 `--provenance` |
 | `npm version` 后 CI 仍用旧版本 | 确认推的是 tag（`git push --tags`），不是只推分支 |
+
+> 区分两种 403：**带 `OIDC permission denied`** = 权限问题（本节第一行）；
+> **不带** = 身份/路径不匹配。provenance 签名成功只说明 GitHub 侧 OIDC 正常，不代表 npm 授权通过。
 
 ## 备选方案：granular token（仅在 Trusted Publishing 不可用时）
 

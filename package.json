@@ -37,6 +37,7 @@
     "kernel-discovery.js",
     "bridge.wl",
     "README.md",
+    "README.en.md",
     "CHANGELOG.md",
     "LICENSE",
     "cordis.patch.yml",

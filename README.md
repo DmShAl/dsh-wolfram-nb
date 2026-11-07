@@ -1,6 +1,15 @@
-# Wolfram 笔记本插件（@nashihang777/dsh-wolfram-nb）
+# Wolfram 笔记本插件（`@nashihang777/dsh-wolfram-nb`）
 
-[GitHub](https://github.com/nashihang777/dsh-wolfram-nb) · [npm](https://www.npmjs.com/package/@nashihang777/dsh-wolfram-nb)
+[![topic: dsh-plugin](https://img.shields.io/badge/topic-dsh--plugin-0b7285)](https://github.com/topics/dsh-plugin)
+[![npm](https://img.shields.io/npm/v/@nashihang777/dsh-wolfram-nb?label=npm)](https://www.npmjs.com/package/@nashihang777/dsh-wolfram-nb)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/nashihang777/dsh-wolfram-nb/blob/main/LICENSE)
+
+**简体中文** · [English](README.en.md) · [GitHub](https://github.com/nashihang777/dsh-wolfram-nb) · [npm](https://www.npmjs.com/package/@nashihang777/dsh-wolfram-nb)
+
+![Wolfram Notebook for DeepSeek Harness](https://raw.githubusercontent.com/nashihang777/dsh-wolfram-nb/main/assets/social-preview.png)
+
+> **DeepSeek Harness 插件**：把本地安装的 Mathematica 变成智能体可调用的工具，并把 Wolfram 笔记本实时渲染在对话窗口右侧。
+> Mathematica kernel bridge and live notebook panel for DeepSeek Harness.
 
 把本地安装的 Mathematica 变成 DeepSeek Harness 的"自己的工具"：智能体可以像调用其它工具一样调用 Wolfram Language，结果会实时渲染在对话窗口右侧的笔记本面板中。
 
@@ -13,10 +22,10 @@
 **从 npm 安装（推荐）**：
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.1.0
+plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.2.0
 ```
 
-版本号可省略（默认 `latest`），或用 `@1.1.0` 固定版本。
+版本号可省略（默认 `latest`），或用 `@1.2.0` 固定版本。
 
 **从 GitHub 安装**：克隆仓库后，把仓库根目录作为 bundle 安装：
 
