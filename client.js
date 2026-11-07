@@ -44,6 +44,8 @@ window.__ModuleLoader__.load({
       'meta.published': 'Published',
       'kind.graphics': 'Graphics',
       'kind.image': 'Image',
+      'image.resize': 'Drag to resize the image (double-click to fit)',
+      'image.hint': 'Drag the corner handle to resize; double-click to fit the panel',
       'kind.parse': 'This input could not be parsed.',
       'kind.timeout': 'Evaluation timed out.',
       'kind.fallback': 'Output could not be typeset.',
@@ -78,6 +80,8 @@ window.__ModuleLoader__.load({
       'meta.published': '发布',
       'kind.graphics': '图形',
       'kind.image': '图像',
+      'image.resize': '拖拽调整图片大小（双击恢复适应宽度）',
+      'image.hint': '拖动右下角手柄调整大小；双击恢复为适应面板宽度',
       'kind.parse': '这个输入无法解析。',
       'kind.timeout': '计算超时。',
       'kind.fallback': '输出无法排版。',
@@ -102,7 +106,14 @@ window.__ModuleLoader__.load({
 .dsw-wl-math{overflow-x:auto;overflow-y:hidden;padding:2px 0 4px;font-size:1.06em}
 .dsw-wl-math math{font-size:1.06em}
 .dsw-wl-plain{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;word-break:break-word;color:var(--dsw-alias-label-primary)}
-.dsw-wl-image{max-width:100%;height:auto;border-radius:8px;background:#fff;padding:4px}
+.dsw-wl-image{max-width:100%;height:auto;border-radius:8px;background:#fff;padding:4px;display:block}
+.dsw-wl-figure{position:relative;display:inline-block;max-width:100%;line-height:0}
+.dsw-wl-figure--pinned{max-width:none;overflow-x:auto;overflow-y:hidden}
+.dsw-wl-figure--pinned .dsw-wl-image{max-width:none}
+.dsw-wl-resize{position:absolute;right:2px;bottom:2px;width:18px;height:18px;border-radius:5px;cursor:nwse-resize;touch-action:none;background:var(--dsw-alias-bg-overlay);border:.5px solid var(--dsw-alias-border-l2);opacity:0;transition:opacity .12s;display:flex;align-items:center;justify-content:center;line-height:0}
+.dsw-wl-resize::after{content:"";width:7px;height:7px;border-right:1.5px solid var(--dsw-alias-label-secondary);border-bottom:1.5px solid var(--dsw-alias-label-secondary)}
+.dsw-wl-figure:hover .dsw-wl-resize,.dsw-wl-resize:focus-visible{opacity:1}
+.dsw-wl-resize:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsw-wl-note{font-size:12px;color:var(--dsw-alias-label-secondary)}
 .dsw-wl-error{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--dsw-alias-state-error-primary);white-space:pre-wrap;word-break:break-word}
 .dsw-wl-text{margin:0;white-space:pre-wrap;word-break:break-word}
@@ -166,6 +177,105 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dsw-wl-math', dangerouslySetInnerHTML: { __html: safe } })
     }
 
+    /**
+     * One rendered picture with a drag handle in its bottom-right corner.
+     *
+     * Until the user drags, the image follows the panel width. The first drag
+     * pins an explicit width, which keeps its aspect ratio and may exceed the
+     * panel (the figure then scrolls). Double-clicking the handle or the image
+     * clears the pinned width and returns to fitting the panel.
+     */
+    function ResizableImage({ cell, kind, t }) {
+      const src = `data:image/png;base64,${cell.image}`
+      const frame = React.useRef(null)
+      const drag = React.useRef(null)
+      const [size, setSize] = React.useState({ src, width: 0 })
+
+      // A different picture in the same cell slot starts from the fitted size.
+      React.useEffect(() => {
+        setSize(previous => (previous.src === src ? previous : { src, width: 0 }))
+      }, [src])
+
+      const clear = React.useCallback(() => {
+        drag.current = null
+        setSize({ src, width: 0 })
+      }, [src])
+
+      const start = (event) => {
+        if (event.button !== undefined && event.button !== 0) return
+        const image = frame.current?.querySelector('img')
+        if (image === null || image === undefined) return
+        const rect = image.getBoundingClientRect()
+        if (rect.width <= 0) return
+        event.preventDefault()
+        drag.current = {
+          startX: event.clientX,
+          startWidth: rect.width,
+          ratio: rect.height / rect.width,
+        }
+        setSize({ src, width: Math.round(rect.width) })
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId)
+        } catch {
+          /* capture is a refinement, not a requirement */
+        }
+      }
+
+      const move = (event) => {
+        const active = drag.current
+        if (active === null) return
+        event.preventDefault()
+        const width = Math.max(64, Math.round(active.startWidth + (event.clientX - active.startX)))
+        setSize({ src, width })
+      }
+
+      const end = (event) => {
+        if (drag.current === null) return
+        drag.current = null
+        try {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        } catch {
+          /* already released */
+        }
+      }
+
+      const pinned = size.width > 0
+      const image = h('img', {
+        className: 'dsw-wl-image',
+        src,
+        alt: kind === 'graphics' ? t('kind.graphics') : t('kind.image'),
+        loading: 'lazy',
+        draggable: false,
+        style: pinned ? { width: `${size.width}px` } : undefined,
+        onDoubleClick: clear,
+        title: t('image.hint'),
+      })
+
+      return h('div', {
+        className: pinned ? 'dsw-wl-figure dsw-wl-figure--pinned' : 'dsw-wl-figure',
+        ref: frame,
+      },
+        image,
+        h('span', {
+          className: 'dsw-wl-resize',
+          role: 'separator',
+          tabIndex: 0,
+          'aria-label': t('image.resize'),
+          title: t('image.resize'),
+          onPointerDown: start,
+          onPointerMove: move,
+          onPointerUp: end,
+          onPointerCancel: end,
+          onDoubleClick: clear,
+          onKeyDown: event => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+            event.preventDefault()
+            const base = size.width > 0 ? size.width : 300
+            setSize({ src, width: Math.max(64, base + (event.key === 'ArrowRight' ? 24 : -24)) })
+          },
+        }))
+    }
+
     function OutputView({ cell, t }) {
       const kind = cell.kind
       if (kind === 'expression') {
@@ -174,12 +284,7 @@ window.__ModuleLoader__.load({
       }
       if (kind === 'graphics' || kind === 'image') {
         if (typeof cell.image === 'string' && cell.image.length > 0) {
-          return h('img', {
-            className: 'dsw-wl-image',
-            src: `data:image/png;base64,${cell.image}`,
-            alt: kind === 'graphics' ? t('kind.graphics') : t('kind.image'),
-            loading: 'lazy',
-          })
+          return h(ResizableImage, { cell, kind, t })
         }
         return h('div', { className: 'dsw-wl-note' },
           kind === 'graphics' ? t('kind.fallback') : t('kind.fallback'))

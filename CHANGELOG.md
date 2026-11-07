@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0 — 2026-11-07
+
+### Added
+
+- **Resizable pictures in the notebook panel.** Every rendered `Graphics`/`Image` output now
+  carries a drag handle in its bottom-right corner: drag to set an explicit width (aspect ratio is
+  preserved, and an image may grow past the panel, which then scrolls), double-click the image or
+  the handle to return to fitting the panel width. The handle is keyboard-reachable and resizes
+  with the arrow keys.
+
+### Fixed
+
+- **A cell holding several top-level expressions broke the whole document.** `ToExpression` with
+  `HoldComplete` returns one argument per expression, so `ReleaseHold` produced a `Sequence`;
+  splicing it into the cell record made `ExportString[..., "JSON"]` fail and the panel received
+  nothing. Such cells are now folded into a single `CompoundExpression`, and a value that is
+  nevertheless a `Sequence` is kept as a list.
+- **A serialization failure no longer loses the request.** If the document still cannot be
+  exported, the bridge answers with an error document instead of an empty response.
+
 ## 1.1.0 — 2026-11-07
 
 First public release as `@nashihang777/dsh-wolfram-nb`.

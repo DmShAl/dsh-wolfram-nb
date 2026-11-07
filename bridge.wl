@@ -73,12 +73,34 @@ WolframBridge`graphicsRecord[index_Integer, value_, timing_Integer] := Module[{i
       WolframBridge`safeString[value, ""], 4000]|>
 ];
 
-WolframBridge`cellRecord[index_Integer, value_, timing_Integer] := Module[{},
+(* A top-level Sequence would splice into every association built from it and
+   break the JSON export, so keep the value as one inert expression. *)
+WolframBridge`plainValue[value_] := Module[{head},
+  head = Head[Unevaluated[value]];
+  If[head === Sequence, List @@ Unevaluated[value], value]
+];
+
+WolframBridge`cellRecord[index_Integer, value_, timing_Integer] := Module[
+  {plain = WolframBridge`plainValue[value]},
   Which[
-    WolframBridge`imageQ[value], WolframBridge`imageRecord[index, value, timing],
-    WolframBridge`graphicQ[value], WolframBridge`graphicsRecord[index, value, timing],
-    value === Null, <|"index" -> index, "kind" -> "null", "timingMs" -> timing|>,
-    True, WolframBridge`expressionRecord[index, value, timing]
+    WolframBridge`imageQ[plain], WolframBridge`imageRecord[index, plain, timing],
+    WolframBridge`graphicQ[plain], WolframBridge`graphicsRecord[index, plain, timing],
+    plain === Null, <|"index" -> index, "kind" -> "null", "timingMs" -> timing|>,
+    True, WolframBridge`expressionRecord[index, plain, timing]
+  ]
+];
+
+(* One cell may hold several top-level expressions (separated by `;` or newlines).
+   ToExpression then returns HoldComplete[e1, e2, ...]; wrapping them in one
+   CompoundExpression keeps ReleaseHold from producing a bare Sequence. *)
+WolframBridge`holdCell[code_String] := Module[{held},
+  held = Quiet@Check[ToExpression[code, InputForm, HoldComplete], $Failed];
+  If[Head[held] =!= HoldComplete, Return[$Failed]];
+  Which[
+    Length[held] === 0, HoldComplete[Null],
+    Length[held] === 1, held,
+    True, Replace[held,
+      HoldComplete[expressions__] :> HoldComplete[CompoundExpression[expressions]]]
   ]
 ];
 
@@ -93,7 +115,7 @@ WolframBridge`evalCell[cell_, {index_Integer}] := Module[
         "text" -> Lookup[cell, "text", ""]|>|>]
   ];
   started = AbsoluteTime[];
-  held = Quiet@Check[ToExpression[code, InputForm, HoldComplete], $Failed];
+  held = WolframBridge`holdCell[code];
   If[held === $Failed,
     Return[<|"type" -> Lookup[cell, "type", "input"], "source" -> code,
       "text" -> Lookup[cell, "text", ""],
@@ -170,9 +192,19 @@ WolframBridge`normalize[value_Association] :=
 
 WolframBridge`normalize[value_] := value;
 
-WolframBridge`publish[request_, document_] := Module[{payload, responsePath, id},
+WolframBridge`publish[request_, document_] := Module[
+  {payload, responsePath, id, json},
   id = Lookup[request, "id", "0"];
-  payload = WolframBridge`encode[WolframBridge`toJson[document]];
+  json = Quiet@Check[WolframBridge`toJson[document], $Failed];
+  If[! StringQ[json],
+    json = WolframBridge`toJson[<|
+      "id" -> id,
+      "kernelVersion" -> $Version,
+      "title" -> Lookup[request, "title", ""],
+      "cells" -> {},
+      "error" -> "The result could not be serialized as JSON."|>]
+  ];
+  payload = WolframBridge`encode[json];
   responsePath = Lookup[request, "respPath", ""];
   If[StringQ[responsePath] && StringLength[responsePath] > 0,
     Export[responsePath, payload, "Text"];
