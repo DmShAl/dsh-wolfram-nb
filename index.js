@@ -20,6 +20,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
+const BRIDGE_VERSION = '1.3.0'
 const DEFAULT_TIMEOUT_MS = 180_000
 const DEFAULT_IDLE_MS = 30 * 60_000
 const START_TIMEOUT_MS = 90_000
@@ -32,6 +33,26 @@ function asciiJson(value) {
 function truncate(text, max) {
   const value = String(text ?? '')
   return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+const ERROR_HINTS = [
+  [/Power::infy|Divide::infy/, 'Division by zero or an infinite limit: guard the denominator or use Limit.'],
+  [/Part::partw|Part::partd/, 'Part index or depth is wrong: check Length/Dimensions first, or use a default value.'],
+  [/Syntax::sntxi|Syntax::bktmcp|Syntax::bktx/, 'Syntax error: check brackets and operators; SyntaxQ can validate an expression before evaluation.'],
+  [/General::stop/, 'Further messages were suppressed: fix the first reported error.'],
+  [/EntityValue::conopen|Quantity::conopen/, 'Wolfram data services need network access; EntityValue may download metadata on first use.'],
+  [/URLRead::offline|Import::nfurl/, 'Internet access is disabled in this call: avoid network functions here or drop the wrapper.'],
+  [/CountryData::/, 'CountryData goes through Entity downloads and can hang here; use EntityValue[Entity["Country", ...], ...] instead.'],
+  [/Initializing WordData indices|Downloading metadata for type/, 'The kernel is downloading Wolfram data; that can stall for a long time. Postpone the call or widen the timeout.'],
+]
+
+function suggestFixes(text) {
+  const source = String(text ?? '')
+  const hints = []
+  for (const [pattern, hint] of ERROR_HINTS) {
+    if (pattern.test(source) && !hints.includes(hint)) hints.push(hint)
+  }
+  return hints
 }
 
 function timestamp() {
@@ -116,6 +137,7 @@ function describeDocument(document, extra) {
 }
 
 const WOLFRAM_KERNEL_KEY = Symbol.for('dsh.wolfram.kernels')
+const WOLFRAM_EXIT_KEY = Symbol.for('dsh.wolfram.exitHook')
 
 class WolframKernel {
   constructor(options) {
@@ -192,7 +214,17 @@ class WolframKernel {
   onLine(line) {
     if (line.startsWith('@@WB_READY@@')) {
       clearTimeout(this.readyTimer)
-      this.resolveReady?.(line.slice('@@WB_READY@@'.length).trim())
+      const payload = line.slice('@@WB_READY@@'.length).trim()
+      const [bridgeVersion = '', kernelVersion = ''] = payload.split('|')
+      this.bridgeVersion = bridgeVersion
+      this.kernelVersion = kernelVersion
+      if (bridgeVersion !== BRIDGE_VERSION) {
+        this.rejectReady?.(new Error(
+          `Wolfram bridge version mismatch: host expects ${BRIDGE_VERSION}, bridge.wl reports ${bridgeVersion === '' ? 'none' : bridgeVersion}. Update bridge.wl and index.js together.`))
+        this.dispose()
+        return
+      }
+      this.resolveReady?.(payload)
       return
     }
     if (line.startsWith('@@WB_BEGIN@@')) {
@@ -281,7 +313,9 @@ class WolframKernel {
         const consoleTail = (waiter?.console ?? []).slice(-8).join('\n').trim()
         this.waiters.delete(id)
         const suffix = consoleTail === '' ? '' : `\nLast kernel output:\n${consoleTail}`
-        rejectPromise(new Error(`Wolfram evaluation timed out after ${Math.round(timeoutMs / 1000)} s.${suffix}`))
+        const stuck = /Loading from Wolfram Research server|Downloading metadata for type|Initializing WordData indices/.test(consoleTail)
+        const hint = stuck ? '\nHint: the kernel is stuck on a Wolfram network download; pass kernelArgs: ["-pacletreadonly"] or disable "Automatically check for data updates".' : ''
+        rejectPromise(new Error(`Wolfram evaluation timed out after ${Math.round(timeoutMs / 1000)} s.${suffix}${hint}`))
         this.dispose()
       }, timeoutMs)
       this.waiters.set(id, {
@@ -302,6 +336,10 @@ class WolframKernel {
     })
   }
 
+  killSync() {
+    try { this.proc?.kill() } catch { /* ignore */ }
+  }
+
   dispose() {
     const child = this.proc
     this.proc = null
@@ -320,6 +358,14 @@ export function apply(ctx, config = {}) {
     ? globalThis[WOLFRAM_KERNEL_KEY]
     : new Map()
   globalThis[WOLFRAM_KERNEL_KEY] = registry
+
+  const stats = { evaluations: 0, timeouts: 0, restarts: 0 }
+  if (globalThis[WOLFRAM_EXIT_KEY] !== true) {
+    globalThis[WOLFRAM_EXIT_KEY] = true
+    process.once('exit', () => {
+      for (const kernel of registry.values()) kernel.killSync()
+    })
+  }
 
   const configuredKernel = config?.kernel ?? ''
   const kernelArgs = Array.isArray(config?.kernelArgs)
@@ -393,7 +439,12 @@ export function apply(ctx, config = {}) {
     const effectiveTimeout = Number.isFinite(perCallTimeout) && perCallTimeout > 0
       ? perCallTimeout
       : timeoutMs
-    return kernel.evaluate(request, { signal: context.signal, timeoutMs: effectiveTimeout })
+    try {
+      return await kernel.evaluate(request, { signal: context.signal, timeoutMs: effectiveTimeout })
+    } catch (error) {
+      if (/timed out/i.test(String(error?.message ?? ''))) stats.timeouts += 1
+      throw error
+    }
   }
 
   /** Read a .nb through the kernel and publish its document to the panel. */
@@ -489,6 +540,7 @@ export function apply(ctx, config = {}) {
       render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
     },
     async execute(args, exec) {
+      stats.evaluations += 1
       const context = await kernelContext(exec)
       const cells = normalizeCells(args)
       if (cells.length === 0) throw new Error('wolfram_eval needs `code` or at least one input cell.')
@@ -525,11 +577,12 @@ export function apply(ctx, config = {}) {
         notebookPath: nbPath ?? '',
         prompt: typeof args?.title === 'string' ? args.title : '',
       })
+      const hints = suggestFixes(response.console)
       const summary = describeDocument(document, {
         console: response.console,
         notebookPath: nbPath ? nbPath.replace(/\//g, '\\') : undefined,
         panel: true,
-      })
+      }) + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
       return {
         ok: true,
         summary,
@@ -574,6 +627,7 @@ export function apply(ctx, config = {}) {
       const context = await kernelContext(exec)
       const action = String(args?.action ?? '')
       if (action === 'reset') {
+        stats.restarts += 1
         disposeKernel(context.sessionId)
         return { ok: true, summary: 'Wolfram kernel restarted; earlier definitions are gone.', notebookPath: '' }
       }
@@ -589,9 +643,10 @@ export function apply(ctx, config = {}) {
         const runtime = kernel === undefined
           ? ''
           : ` Args: ${kernel.kernelArgs.length === 0 ? 'none' : kernel.kernelArgs.join(' ')}. Timeout: ${Math.round(kernel.timeoutMs / 1000)} s.`
+        const bridge = ` Bridge: ${kernel?.bridgeVersion ?? 'n/a'} (Mathematica ${kernel?.kernelVersion ?? 'n/a'}). Evaluations: ${stats.evaluations}, timeouts: ${stats.timeouts}, restarts: ${stats.restarts}.`
         const summary = kernel === undefined
-          ? `No kernel is running for this session (${context.cwd}). ${discovery}`
-          : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery}${runtime} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
+          ? `No kernel is running for this session (${context.cwd}). ${discovery}${bridge}`
+          : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery}${runtime}${bridge} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
         return { ok: true, summary, notebookPath: '' }
       }
       const requested = String(args?.path ?? '').trim()

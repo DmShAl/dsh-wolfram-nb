@@ -55,3 +55,27 @@ test('per-call timeoutMs is honored and the timeout error carries the kernel con
     },
   )
 })
+
+test('common error messages come back with a suggested fix', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_eval').execute(
+    { code: '1/0', exportNotebook: false },
+    {},
+  )
+
+  assert.match(result.summary, /Suggested fix/)
+})
+
+test('status reports the bridge version and evaluation counters', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
+  const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
+
+  assert.match(status.summary, /Bridge: 1\.3\.0/)
+  assert.match(status.summary, /Evaluations: 1/)
+})
+

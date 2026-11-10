@@ -13,6 +13,15 @@
 - **Timeout errors carry the kernel console.** The last lines the kernel printed are appended to
   the timeout message, so a stalled download is visible instead of a bare "timed out".
 - `wolfram_notebook action="status"` now reports the kernel arguments and the timeout.
+- **Bridge/host protocol handshake.** `bridge.wl` reports its version on the ready line; a
+  mismatch with `index.js` fails with an explicit "update both files" error instead of
+  misbehaving silently.
+- **Suggested fixes for common messages.** `Power::infy`, `Part::partw`, `Syntax::sntxi`,
+  network/Entity messages and the paclet-download stall each append a one-line hint to the
+  tool summary.
+- **`status` reports the bridge version and counters** (evaluations, timeouts, restarts).
+- **Child kernels are killed on host exit**, so a crashed host no longer leaves `math.exe`
+  processes behind.
 
 ## 1.2.0 — 2026-11-07
 

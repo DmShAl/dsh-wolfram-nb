@@ -7,7 +7,7 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.1.0";
+WolframBridge`$version = "1.3.0";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
 WolframBridge`$cellTimeout = 300;
@@ -338,6 +338,6 @@ WolframBridge`Eval[base64_String] := Module[{request},
 ];
 
 WolframBridge`Ready[] := Module[{},
-  WriteString["stdout", "@@WB_READY@@", $Version, "\n"];
+  WriteString["stdout", "@@WB_READY@@", WolframBridge`$version, "|", $Version, "\n"];
   Null
 ];
