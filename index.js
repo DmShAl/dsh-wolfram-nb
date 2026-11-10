@@ -1132,7 +1132,7 @@ export function apply(ctx, config = {}) {
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['status', 'symbols', 'save', 'load'] },
+        action: { type: 'string', enum: ['status', 'symbols', 'save', 'load', 'clear'] },
         path: { type: 'string', description: 'State file for save/load; defaults to .dsh-wolfram/state-<timestamp>.mx.' },
         pattern: { type: 'string', description: 'Name pattern for action=symbols (default "Global`*").' },
         limit: { type: 'number', description: 'Maximum number of names to list (default 100).' },
@@ -1167,7 +1167,9 @@ export function apply(ctx, config = {}) {
       if (action === 'symbols') {
         const pattern = String(args?.pattern ?? 'Global`*')
         const limit = Math.max(1, Math.min(500, Math.floor(Number(args?.limit) || 100)))
-        const code = `Module[{names = Names[${wlString(pattern)}]},
+        const code = `Module[{names = Select[Names[${wlString(pattern)}],
+    StringFreeQ[#, "$"] && (ToExpression[#, InputForm, Hold] /. Hold[s_] :>
+      (Length[OwnValues[s]] + Length[DownValues[s]] + Length[UpValues[s]] + Length[SubValues[s]] > 0)) &]},
   Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "count" -> Length[names],
     "names" -> Take[names, UpTo[${limit}]]|>, "JSON"], "\\n" -> ""]];
 ];`
@@ -1212,6 +1214,15 @@ export function apply(ctx, config = {}) {
           path: file,
         }
       }
+      if (action === 'clear') {
+        const code = `Module[{names},
+  names = Select[Names["Global\`*"], StringFreeQ[#, "$"] &];
+  Quiet@(ClearAll /@ names);
+  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "cleared" -> Length[names]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, STATE_MARKER)
+        return { ok: payload.ok === true, summary: `Cleared ${payload.cleared} Global symbol(s) (names without "$").` }
+      }
       throw new Error(`Unknown wolfram_state action: ${action}`)
     },
   }
@@ -1252,7 +1263,8 @@ export function apply(ctx, config = {}) {
         : 200
       const file = resolveWorkspacePath(context.cwd, args?.path, join('wolfram-plots', `render-${timestamp()}.${format}`))
       mkdirSync(dirname(file), { recursive: true })
-      const code = `Module[{img = ${expr}, file = ${wlString(file.replace(/\\/g, '/'))}, res = ${resolution}, ok = False, bytes = 0},
+      const maTeXPrefix = /MaTeX\s*\[/.test(expr) ? 'Quiet@Check[Needs["MaTeX`"], Null];\n' : ''
+      const code = `${maTeXPrefix}Module[{img = ${expr}, file = ${wlString(file.replace(/\\/g, '/'))}, res = ${resolution}, ok = False, bytes = 0},
   Quiet@Check[Export[file, img, ImageResolution -> res], Null];
   bytes = If[FileExistsQ[file], FileByteCount[file], 0];
   ok = bytes > 0;

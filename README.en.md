@@ -53,8 +53,8 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
 | `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, and `status` shows the latest `Print` output |
 | `wolfram_verify` | `identity` checks an identity numerically (lhs/rhs, variables, tolerance); `ode` measures the residual of a solution on a range; `integral` compares a definite integral with its closed form |
-| `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists definitions; `save`/`load` persist the Global context via `DumpSave`/`Get` |
-| `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory and reporting the file size |
+| `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context; `clear` drops it |
+| `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory, auto-loading MaTeX when the expression uses it |
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |

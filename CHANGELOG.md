@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.1 — 2026-11-11
+
+### Added
+
+- **`wolfram_state clear`** drops the Global definitions (symbols without `$`; the kernel keeps
+  running, temporary `Module` symbols are left alone).
+- **`wolfram_render` auto-loads MaTeX** when the expression contains `MaTeX[...]`, so a
+  publication plot no longer needs a separate `Needs["MaTeX`"]` call.
+- **`wolfram_state symbols` filters** names containing `$` and symbols without definitions,
+  hiding the bridge's internal leftovers.
+
 ## 1.4.0 — 2026-11-11
 
 ### Added

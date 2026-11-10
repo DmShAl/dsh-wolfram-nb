@@ -322,5 +322,63 @@ test('wolfram_batch evaluates several codes in parallel kernels', async (t) => {
   assert.match(result.summary, /Out: 4/)
 })
 
+test('wolfram_render loads MaTeX automatically when the expression uses it', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const probe = await tools.get('wolfram_eval').execute(
+    { code: 'FindFile["MaTeX`"] =!= $Failed', exportNotebook: false },
+    {},
+  )
+  if (!/True/.test(probe.summary)) {
+    t.skip('MaTeX is not installed')
+    return
+  }
+
+  const result = await tools.get('wolfram_render').execute({
+    expr: 'Plot[Sin[x], {x, 0, 2 Pi}, Frame -> True, FrameLabel -> {MaTeX["x"], MaTeX["\\\\sin x"]}]',
+    format: 'png',
+    path: 'wolfram-plots/render-matex-test.png',
+  }, {})
+  assert.equal(result.ok, true)
+
+  const bytes = readFileSync('wolfram-plots/render-matex-test.png')
+  assert.equal(bytes.toString('ascii', 1, 4), 'PNG')
+  unlinkSync('wolfram-plots/render-matex-test.png')
+})
+
+test('wolfram_state symbols hides temporary and undefined symbols', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  await tools.get('wolfram_eval').execute(
+    { code: 'keptSymbol = 7; scratch$42 = 1; undefinedLeftover;', exportNotebook: false },
+    {},
+  )
+
+  const result = await tools.get('wolfram_state').execute({ action: 'symbols', limit: 200 }, {})
+  assert.match(result.summary, /keptSymbol/)
+  assert.doesNotMatch(result.summary, /scratch\$42/)
+  assert.doesNotMatch(result.summary, /undefinedLeftover/)
+})
+
+test('wolfram_state clear drops the global definitions', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  await tools.get('wolfram_eval').execute(
+    { code: 'clearMe = 5', exportNotebook: false },
+    {},
+  )
+  const cleared = await tools.get('wolfram_state').execute({ action: 'clear' }, {})
+  assert.equal(cleared.ok, true)
+
+  const check = await tools.get('wolfram_eval').execute(
+    { code: 'clearMe', exportNotebook: false },
+    {},
+  )
+  assert.match(check.summary, /Out: clearMe/)
+})
+
 
 
