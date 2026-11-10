@@ -271,6 +271,7 @@ class WolframKernel {
     if (waiter !== undefined && line.trim() !== '' && !line.startsWith('@@WB_')) {
       if (!/^Connecting\.\.\./.test(line) && !/^Elapsed time\b/.test(line)) {
         waiter.console.push(line)
+        waiter.onOutput?.(line)
       }
     }
   }
@@ -328,6 +329,7 @@ class WolframKernel {
       }, timeoutMs)
       this.waiters.set(id, {
         console: [],
+        onOutput: options.onOutput,
         requestPath,
         responsePath,
         timer,
@@ -772,6 +774,7 @@ export function apply(ctx, config = {}) {
           timeoutMs: jobTimeout,
           summary: '',
           console: '',
+          progress: [],
           error: null,
           cancelled: false,
           controller: new AbortController(),
@@ -781,7 +784,14 @@ export function apply(ctx, config = {}) {
           try {
             const response = await kernel.evaluate(
               { id, title, cells, nbPath },
-              { timeoutMs: jobTimeout, signal: job.controller.signal },
+              {
+                timeoutMs: jobTimeout,
+                signal: job.controller.signal,
+                onOutput: (line) => {
+                  if (job.progress[job.progress.length - 1] !== line) job.progress.push(line)
+                  if (job.progress.length > 20) job.progress.shift()
+                },
+              },
             )
             const document = response.document
             if (document?.error) {
@@ -826,7 +836,10 @@ export function apply(ctx, config = {}) {
       const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
       if (action === 'status') {
         const suffix = job.status === 'failed' && job.error !== null ? ` Error: ${job.error}` : ''
-        return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}`, jobId: job.id }
+        const progress = job.status === 'running' && job.progress.length > 0
+          ? `\nProgress:\n${job.progress.slice(-10).join('\n')}`
+          : ''
+        return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${progress}`, jobId: job.id }
       }
       if (action === 'cancel') {
         if (job.status === 'running') {

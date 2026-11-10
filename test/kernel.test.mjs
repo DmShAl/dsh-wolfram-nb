@@ -101,6 +101,30 @@ test('a submitted job runs out of process and returns its result', async (t) => 
   assert.match(result.summary, /5050/)
 })
 
+test('a running job exposes the console lines it printed', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const jobTool = tools.get('wolfram_job')
+  const submitted = await jobTool.execute(
+    { action: 'submit', code: 'Do[Print["tick ", i]; Pause[0.7], {i, 4}]; 42' },
+    {},
+  )
+  const id = /id="([^"]+)"/.exec(submitted.summary)[1]
+
+  let sawProgress = false
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    const status = await jobTool.execute({ action: 'status', id }, {})
+    if (/tick/.test(status.summary)) { sawProgress = true; break }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  assert.ok(sawProgress, 'progress lines should be visible in status')
+
+  const result = await waitForJob(jobTool, id)
+  assert.match(result.summary, /42/)
+})
+
 test('a running job can be cancelled', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
   teardown(t, cleanups)
