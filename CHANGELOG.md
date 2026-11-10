@@ -8,6 +8,9 @@
   paclet auto-updates (and their network stalls) out of the way.
 - **Per-call `timeoutMs`** on `wolfram_eval`, overriding the configured default for one call.
 
+- **`wolfram_job` tool.** A long evaluation can run as a background job in its own kernel:
+  `submit` returns an id, while `status`/`result`/`cancel`/`list` manage it. 30 min default
+  timeout, 20 jobs kept (2 running at once), finished jobs expire after an hour.
 ### Changed
 
 - **Timeout errors carry the kernel console.** The last lines the kernel printed are appended to
