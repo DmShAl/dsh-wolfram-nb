@@ -48,6 +48,7 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 |---|---|
 | `wolfram_eval` | 在常驻的本地内核里执行任意 Wolfram Language 代码（一个或多个单元），支持符号计算、微积分、方程求解、矩阵、单位、数据处理、文件导入导出等 |
 | `wolfram_notebook` | `open` 渲染已有的 `.nb` 文件；`reset` 重启内核；`status` 查看内核状态 |
+| `wolfram_job` | `submit` 在独立内核里后台运行长时间计算（默认 30 分钟）；`status`/`result`/`cancel`/`list` 管理任务 |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |
@@ -61,7 +62,8 @@ Host 插件 (index.js)
   ├─ 每个会话一个 math.exe -noprompt 进程
   ├─ bridge.wl：文件式 JSON 协议（请求/响应各一个文件，stdout 只走标记行）
   ├─ 把结果写成 .dsh-wolfram/latest.json（含 publishedAt、MathML、base64 PNG）
-  └─ 注册 wolfram_eval / wolfram_notebook 两个工具
+  ├─ wolfram_job：每个任务一个独立 math.exe（超时不打断会话内核）
+  └─ 注册 wolfram_eval / wolfram_notebook / wolfram_job 三个工具
 Client 插件 (client.js)
   ├─ 注册右侧栏 Tab 类型 wolfram-notebook（同时注册引导页入口）
   ├─ 面板轮询 latest.json，按 publishedAt 增量刷新
