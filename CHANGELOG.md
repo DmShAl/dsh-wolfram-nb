@@ -13,6 +13,9 @@
   timeout, 20 jobs kept (2 running at once), finished jobs expire after an hour.
 ### Changed
 
+- **Job progress.** `wolfram_job status` now includes the last console lines a running
+  job printed (`Print` output), so long jobs are observable while they run.
+
 - **Timeout errors carry the kernel console.** The last lines the kernel printed are appended to
   the timeout message, so a stalled download is visible instead of a bare "timed out".
 - `wolfram_notebook action="status"` now reports the kernel arguments and the timeout.
