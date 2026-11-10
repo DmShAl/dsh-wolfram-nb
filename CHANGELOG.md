@@ -1,8 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-11
 
 ### Added
+
+- **`wolfram_verify` tool.** Numeric identity sampling (`identity`), ODE residual testing
+  (`ode`) and integral/closed-form comparison (`integral`) with a configurable tolerance.
+- **`wolfram_state` tool.** `status` (Global symbols, memory, `$Assumptions`, packages),
+  `symbols`, and `save`/`load` of the Global context via `DumpSave`/`Get`.
+- **`wolfram_render` tool.** Export a graphics expression to PNG/SVG/PDF/JPG with
+  `ImageResolution`, creating the target directory and reporting the file size.
 
 - **`kernelArgs` config.** Extra argv entries for `math.exe`, e.g. `['-pacletreadonly']` to keep
   paclet auto-updates (and their network stalls) out of the way.

@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync, unlinkSync } from 'node:fs'
 import { apply } from '../index.js'
 
 /**
@@ -164,6 +165,122 @@ test('jobs beyond maxRunningJobs wait in a queue', async (t) => {
 
   const secondResult = await waitForJob(jobTool, secondId)
   assert.match(secondResult.summary, /Out: 4/)
+})
+
+test('wolfram_verify confirms a trigonometric identity numerically', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'identity',
+    lhs: 'Sin[x]^2 + Cos[x]^2',
+    rhs: '1',
+    variables: ['x'],
+    samples: 5,
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /OK/)
+})
+
+test('wolfram_verify rejects a false identity', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'identity',
+    lhs: 'x^2',
+    rhs: 'x^3',
+    variables: ['x'],
+    samples: 5,
+    tolerance: 1e-9,
+  }, {})
+
+  assert.equal(result.ok, false)
+  assert.match(result.summary, /FAILED/)
+})
+
+test('wolfram_verify accepts an ODE solution', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'ode',
+    ode: "y'[x] == y[x]",
+    solution: 'Exp[x]',
+    function: 'y',
+    variable: 'x',
+    range: [0, 1],
+    samples: 5,
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /OK/)
+})
+
+test('wolfram_verify checks a definite integral against its closed form', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'integral',
+    integral: 'Integrate[Exp[-x^2], {x, 0, 1}]',
+    result: 'Sqrt[Pi]/2 Erf[1]',
+    tolerance: 1e-9,
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /OK/)
+})
+
+test('wolfram_state saves and restores global definitions', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const stateTool = tools.get('wolfram_state')
+  await tools.get('wolfram_eval').execute(
+    { code: 'savedSymbol = 42', exportNotebook: false },
+    {},
+  )
+  const saved = await stateTool.execute({ action: 'save', path: '.dsh-wolfram/state-test.mx' }, {})
+  assert.equal(saved.ok, true)
+
+  await tools.get('wolfram_notebook').execute({ action: 'reset' }, {})
+  const loaded = await stateTool.execute({ action: 'load', path: '.dsh-wolfram/state-test.mx' }, {})
+  assert.equal(loaded.ok, true)
+
+  const check = await tools.get('wolfram_eval').execute(
+    { code: 'savedSymbol', exportNotebook: false },
+    {},
+  )
+  assert.match(check.summary, /42/)
+})
+
+test('wolfram_state reports global symbols and memory', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const status = await tools.get('wolfram_state').execute({ action: 'status' }, {})
+  assert.equal(status.ok, true)
+  assert.match(status.summary, /Global symbols/)
+  assert.match(status.summary, /Memory/)
+})
+
+test('wolfram_render exports a plot to PNG', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_render').execute({
+    expr: 'Plot[Sin[x], {x, 0, 2 Pi}]',
+    format: 'png',
+    path: 'wolfram-plots/render-test.png',
+  }, {})
+  assert.equal(result.ok, true)
+
+  const bytes = readFileSync('wolfram-plots/render-test.png')
+  assert.equal(bytes[0], 0x89)
+  assert.equal(bytes.toString('ascii', 1, 4), 'PNG')
+  unlinkSync('wolfram-plots/render-test.png')
 })
 
 

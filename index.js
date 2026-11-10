@@ -59,6 +59,44 @@ function suggestFixes(text) {
   return hints
 }
 
+/** Quote a Wolfram Language string literal. */
+function wlString(value) {
+  return `"${String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n')}"`
+}
+
+/** Parse the JSON payload the kernel prints after a marker (e.g. @@WB_VERIFY@@). */
+function parseMarker(console, marker) {
+  for (const rawLine of String(console ?? '').split(/\r?\n/)) {
+    let text = rawLine
+    // Print may echo the string in InputForm (quoted, with escapes); decode it.
+    if (text.trimStart().startsWith('"')) {
+      try { text = JSON.parse(text.trim()) } catch { /* keep the raw line */ }
+    }
+    const at = text.indexOf(marker)
+    if (at < 0) continue
+    try {
+      return JSON.parse(text.slice(at + marker.length))
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** Format a JS number as a Wolfram Language literal (WL uses *^, not e). */
+function wlReal(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0.'
+  const text = String(number)
+  if (!/[eE]/.test(text)) return text.includes('.') ? text : `${text}.`
+  const [mantissa, exponent] = text.toLowerCase().split('e')
+  return `${mantissa}*^${exponent}`
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
 function timestamp() {
   const now = new Date()
   const pad = (value) => String(value).padStart(2, '0')
@@ -483,6 +521,31 @@ export function apply(ctx, config = {}) {
     return { sourcePath, document }
   }
 
+  /** Resolve an optional path argument against the session workspace. */
+  const resolveWorkspacePath = (cwd, requested, fallback) => {
+    const value = typeof requested === 'string' && requested.trim() !== '' ? requested.trim() : fallback
+    return isAbsolute(value) ? value : resolve(cwd, value)
+  }
+
+  /**
+   * Run one input cell and read the JSON payload it prints after `marker`.
+   * Used by wolfram_verify / wolfram_state / wolfram_render so their results do
+   * not have to be reverse-engineered from the rendered notebook document.
+   */
+  const evaluateMarked = async (context, code, marker) => {
+    const response = await evaluateRequest(context, {
+      id: `marked-${Date.now()}`,
+      cells: [{ type: 'input', code }],
+    })
+    const document = response.document
+    if (document?.error) throw new Error(String(document.error))
+    const payload = parseMarker(response.console, marker)
+    if (payload === null || typeof payload !== 'object') {
+      throw new Error(`The kernel produced no structured result. Console:\n${truncate(response.console, 1200)}`)
+    }
+    return payload
+  }
+
   /** The context a Host command handler runs in (same kernel as the tools). */
   const commandContext = async (agent) => {
     let cwd = process.cwd()
@@ -896,9 +959,296 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const VERIFY_MARKER = '@@WB_VERIFY@@'
+  const STATE_MARKER = '@@WB_STATE@@'
+  const RENDER_MARKER = '@@WB_RENDER@@'
+
+  const wolframVerify = {
+    name: 'wolfram_verify',
+    description: [
+      'Check a result independently instead of trusting it.',
+      'action=identity compares lhs and rhs at random points for the listed variables.',
+      'action=ode substitutes a candidate solution into an ODE and measures the residual on a range.',
+      'action=integral compares a definite integral with the claimed closed form.',
+      'Use it after Integrate/DSolve to catch sign, branch and algebra mistakes.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['identity', 'ode', 'integral'] },
+        lhs: { type: 'string', description: 'Left-hand side for action=identity.' },
+        rhs: { type: 'string', description: 'Right-hand side for action=identity.' },
+        variables: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Variables to sample for action=identity (default ["x"]).',
+        },
+        range: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Sample interval [lo, hi] for identity, or the ODE interval (default [-5, 5] / [0, 1]).',
+        },
+        samples: { type: 'number', description: 'Number of random samples or evaluation points (default 8).' },
+        tolerance: { type: 'number', description: 'Absolute tolerance (default 1e-9).' },
+        ode: { type: 'string', description: 'ODE as an equation, e.g. "y\'[x] == y[x]".' },
+        solution: { type: 'string', description: 'Candidate solution expression for action=ode.' },
+        function: { type: 'string', description: 'Dependent function symbol (default "y").' },
+        variable: { type: 'string', description: 'Independent variable (default "x").' },
+        integral: { type: 'string', description: 'Definite integral expression, e.g. "Integrate[Exp[-x^2], {x, 0, 1}]".' },
+        result: { type: 'string', description: 'Claimed closed form for action=integral.' },
+      },
+      required: ['action'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, summary: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const action = String(args?.action ?? '')
+      const samples = Math.max(2, Math.min(200, Math.floor(Number(args?.samples) || 8)))
+      const tolerance = Number.isFinite(Number(args?.tolerance)) && Number(args?.tolerance) > 0
+        ? Number(args.tolerance)
+        : 1e-9
+      const range = Array.isArray(args?.range) && args.range.length === 2 && args.range.every(isFiniteNumber)
+        ? args.range
+        : null
+      if (action === 'identity') {
+        const lhs = String(args?.lhs ?? '').trim()
+        const rhs = String(args?.rhs ?? '').trim()
+        if (lhs === '' || rhs === '') throw new Error('wolfram_verify identity needs `lhs` and `rhs`.')
+        const variables = Array.isArray(args?.variables) && args.variables.length > 0
+          ? args.variables.map((name) => String(name))
+          : ['x']
+        const vars = variables.map((name) => `Symbol[${wlString(name)}]`).join(', ')
+        const lo = range ? range[0] : -5
+        const hi = range ? range[1] : 5
+        const code = `Module[{lhs = ${lhs}, rhs = ${rhs}, vars = {${vars}}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, diffs, finite, maxErr, ok},
+  diffs = Table[With[{v = Table[RandomReal[{lo, hi}], {Length[vars]}]},
+    Quiet@Check[N[(lhs - rhs) /. Thread[vars -> v]], Indeterminate]], {n}];
+  finite = Select[diffs, NumericQ[#] && NumberQ[#] &];
+  maxErr = If[finite === {}, -1., Max[Abs[finite]]];
+  ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol];
+  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
+        const maxError = Number(payload.maxError)
+        const ok = payload.ok === true
+        return {
+          ok,
+          summary: ok
+            ? `OK: identity holds numerically (max error ${maxError} over ${payload.samples} samples).`
+            : `FAILED: max error ${maxError < 0 ? 'could not be evaluated' : maxError} exceeds tolerance ${tolerance} over ${payload.samples} samples.`,
+        }
+      }
+      if (action === 'ode') {
+        const ode = String(args?.ode ?? '').trim()
+        const solution = String(args?.solution ?? '').trim()
+        if (ode === '' || solution === '') throw new Error('wolfram_verify ode needs `ode` and `solution`.')
+        const variable = String(args?.variable ?? 'x').replace(/[^A-Za-z0-9]/g, '') || 'x'
+        const funName = String(args?.function ?? 'y').replace(/[^A-Za-z0-9]/g, '') || 'y'
+        const lo = range ? range[0] : 0
+        const hi = range ? range[1] : 1
+        const code = `Module[{ode = ${ode}, fun = ${funName}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, res, vals, finite, maxErr, ok},
+  res = ode /. Equal -> Subtract /. fun -> Function[{${variable}}, ${solution}];
+  vals = Table[Quiet@Check[N[res /. ${variable} -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
+  finite = Select[vals, NumericQ[#] && NumberQ[#] &];
+  maxErr = If[finite === {}, -1., Max[Abs[finite]]];
+  ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol];
+  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
+        const maxError = Number(payload.maxError)
+        const ok = payload.ok === true
+        return {
+          ok,
+          summary: ok
+            ? `OK: the solution satisfies the ODE on [${lo}, ${hi}] (max residual ${maxError} over ${payload.samples} points).`
+            : `FAILED: residual ${maxError < 0 ? 'could not be evaluated' : maxError} exceeds tolerance ${tolerance} on [${lo}, ${hi}].`,
+        }
+      }
+      if (action === 'integral') {
+        const integral = String(args?.integral ?? '').trim()
+        const result = String(args?.result ?? '').trim()
+        if (integral === '' || result === '') throw new Error('wolfram_verify integral needs `integral` and `result`.')
+        const code = `Module[{integral = ${integral}, result = ${result}, tol = ${wlReal(tolerance)}, diff, safe, ok},
+  diff = Quiet@Check[N[Abs[integral - result]], Indeterminate];
+  ok = NumberQ[diff] && TrueQ[diff < tol];
+  safe = If[MatchQ[diff, _Real | _Integer | _Rational], diff, -1.];
+  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "difference" -> safe|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
+        const difference = Number(payload.difference)
+        const ok = payload.ok === true
+        return {
+          ok,
+          summary: ok
+            ? `OK: the closed form matches the integral (difference ${difference}).`
+            : `FAILED: the closed form differs from the integral (difference ${difference < 0 ? 'could not be evaluated' : difference}).`,
+        }
+      }
+      throw new Error(`Unknown wolfram_verify action: ${action}`)
+    },
+  }
+
+  const wolframState = {
+    name: 'wolfram_state',
+    description: [
+      'Inspect or persist the state of the persistent kernel.',
+      'action=status reports Global symbol count, memory, assumptions and packages.',
+      'action=symbols lists definitions matching a name pattern.',
+      'action=save writes the Global context with DumpSave; action=load restores it. Both use `.dsh-wolfram/state-<timestamp>.mx` unless `path` is given.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['status', 'symbols', 'save', 'load'] },
+        path: { type: 'string', description: 'State file for save/load; defaults to .dsh-wolfram/state-<timestamp>.mx.' },
+        pattern: { type: 'string', description: 'Name pattern for action=symbols (default "Global`*").' },
+        limit: { type: 'number', description: 'Maximum number of names to list (default 100).' },
+      },
+      required: ['action'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, summary: { type: 'string' }, path: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const action = String(args?.action ?? '')
+      if (action === 'status') {
+        const code = `Module[{},
+  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True,
+    "symbols" -> Length[Names["Global\`*"]],
+    "memoryMB" -> N[MemoryInUse[]/1048576.],
+    "assumptions" -> ToString[$Assumptions, InputForm],
+    "packages" -> Length[$Packages]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, STATE_MARKER)
+        const assumptions = payload.assumptions === 'True' ? 'none' : String(payload.assumptions)
+        return {
+          ok: true,
+          summary: `Global symbols: ${payload.symbols}. Memory: ${Number(payload.memoryMB).toFixed(1)} MB. Assumptions: ${assumptions}. Packages: ${payload.packages}.`,
+        }
+      }
+      if (action === 'symbols') {
+        const pattern = String(args?.pattern ?? 'Global`*')
+        const limit = Math.max(1, Math.min(500, Math.floor(Number(args?.limit) || 100)))
+        const code = `Module[{names = Names[${wlString(pattern)}]},
+  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "count" -> Length[names],
+    "names" -> Take[names, UpTo[${limit}]]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, STATE_MARKER)
+        return {
+          ok: true,
+          summary: `${payload.count} name(s) matching ${pattern}:\n${(payload.names ?? []).join('\n')}`,
+        }
+      }
+      const file = resolveWorkspacePath(context.cwd, args?.path, join(PUBLISH_DIR, `state-${timestamp()}.mx`))
+      mkdirSync(dirname(file), { recursive: true })
+      const wlPath = wlString(file.replace(/\\/g, '/'))
+      if (action === 'save') {
+        const code = `Module[{file = ${wlPath}, ok = False, bytes = 0},
+  Quiet@Check[DumpSave[file, "Global\`"]; ok = FileExistsQ[file], ok = False];
+  bytes = If[ok, FileByteCount[file], 0];
+  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, STATE_MARKER)
+        const ok = payload.ok === true
+        return {
+          ok,
+          summary: ok
+            ? `Saved the Global context to ${file} (${payload.bytes} bytes).`
+            : `Could not save the kernel state to ${file}.`,
+          path: file,
+        }
+      }
+      if (action === 'load') {
+        const code = `Module[{file = ${wlPath}, exists, res = $Failed},
+  exists = FileExistsQ[file];
+  If[exists, res = Quiet@Get[file]];
+  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> (exists && res =!= $Failed), "exists" -> exists, "path" -> file, "result" -> ToString[InputForm[res]]|>, "JSON"], "\\n" -> ""]];
+];`
+        const payload = await evaluateMarked(context, code, STATE_MARKER)
+        const ok = payload.ok === true
+        return {
+          ok,
+          summary: ok
+            ? `Loaded kernel state from ${file}.`
+            : `Could not load kernel state from ${file} (exists: ${payload.exists}, path: ${payload.path}, result: ${payload.result}).`,
+          path: file,
+        }
+      }
+      throw new Error(`Unknown wolfram_state action: ${action}`)
+    },
+  }
+
+  const wolframRender = {
+    name: 'wolfram_render',
+    description: [
+      'Render a Wolfram Language graphics expression to an image file (PNG/SVG/PDF/JPG) with publication defaults.',
+      'Use it instead of hand-writing Export: it creates the target directory, sets ImageResolution and reports the file size.',
+      'Example: expr="Plot[Sin[x], {x, 0, 2 Pi}]", format="png".',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        expr: { type: 'string', description: 'Graphics expression, e.g. "Plot[...]" or "Graphics[...]".' },
+        format: { type: 'string', enum: ['png', 'svg', 'pdf', 'jpg'], description: 'Output format (default png).' },
+        path: { type: 'string', description: 'Output path; defaults to wolfram-plots/render-<timestamp>.<format>.' },
+        imageResolution: { type: 'number', description: 'ImageResolution in dpi (default 200).' },
+      },
+      required: ['expr'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, summary: { type: 'string' }, path: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const expr = String(args?.expr ?? '').trim()
+      if (expr === '') throw new Error('wolfram_render needs `expr`.')
+      const format = ['png', 'svg', 'pdf', 'jpg'].includes(String(args?.format))
+        ? String(args.format)
+        : 'png'
+      const resolution = Number.isFinite(Number(args?.imageResolution))
+        ? Math.max(48, Math.min(2400, Number(args.imageResolution)))
+        : 200
+      const file = resolveWorkspacePath(context.cwd, args?.path, join('wolfram-plots', `render-${timestamp()}.${format}`))
+      mkdirSync(dirname(file), { recursive: true })
+      const code = `Module[{img = ${expr}, file = ${wlString(file.replace(/\\/g, '/'))}, res = ${resolution}, ok = False, bytes = 0},
+  Quiet@Check[Export[file, img, ImageResolution -> res], Null];
+  bytes = If[FileExistsQ[file], FileByteCount[file], 0];
+  ok = bytes > 0;
+  Print["${RENDER_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>, "JSON"], "\\n" -> ""]];
+];`
+      const payload = await evaluateMarked(context, code, RENDER_MARKER)
+      const ok = payload.ok === true
+      return {
+        ok,
+        summary: ok
+          ? `Rendered ${format.toUpperCase()} to ${file} (${payload.bytes} bytes).`
+          : `Could not render ${format.toUpperCase()} to ${file}.`,
+        path: file,
+      }
+    },
+  }
+
   ctx.effect(() => ctx.tools.register(wolframEval), 'wolfram notebook: wolfram_eval tool')
   ctx.effect(() => ctx.tools.register(wolframNotebook), 'wolfram notebook: wolfram_notebook tool')
   ctx.effect(() => ctx.tools.register(wolframJob), 'wolfram notebook: wolfram_job tool')
+  ctx.effect(() => ctx.tools.register(wolframVerify), 'wolfram notebook: wolfram_verify tool')
+  ctx.effect(() => ctx.tools.register(wolframState), 'wolfram notebook: wolfram_state tool')
+  ctx.effect(() => ctx.tools.register(wolframRender), 'wolfram notebook: wolfram_render tool')
 
   ctx.effect(() => () => {
     for (const job of jobs.values()) {

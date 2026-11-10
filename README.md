@@ -49,6 +49,9 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_eval` | 在常驻的本地内核里执行任意 Wolfram Language 代码（一个或多个单元），支持符号计算、微积分、方程求解、矩阵、单位、数据处理、文件导入导出等 |
 | `wolfram_notebook` | `open` 渲染已有的 `.nb` 文件；`reset` 重启内核；`status` 查看内核状态 |
 | `wolfram_job` | `submit` 在独立内核里后台运行长时间计算（默认 30 分钟）；`status`/`result`/`cancel`/`list` 管理任务，`status` 显示运行中任务最近的 `Print` 输出 |
+| `wolfram_verify` | `identity` — численная проверка тождества (lhs/rhs, переменные, допуск); `ode` — невязка решения ОДУ на отрезке; `integral` — сверка определённого интеграла с замкнутой формой |
+| `wolfram_state` | `status` — число Global-символов, память, `$Assumptions`, пакеты; `symbols` — список определений; `save`/`load` — `DumpSave`/`Get` состояния в `.dsh-wolfram/state-*.mx` |
+| `wolfram_render` | экспорт `Plot`/`Graphics` в PNG/SVG/PDF/JPG с `ImageResolution`; создаёт каталог и возвращает размер файла |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |
@@ -97,6 +100,17 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 面板里也可以直接切换：点顶部「打开…」→ 从列表选一个 `.nb`（或输入路径）→ 面板立即渲染，
 同时把该文件设为面板的当前文档。`/wolfram-open <路径>` 是同一能力的命令形式，
 可以直接在输入框执行，不会产生模型消息。
+
+Проверка результата, сохранение состояния и рендер в файл:
+
+```
+wolfram_verify  action="identity"  lhs="Sin[x]^2 + Cos[x]^2"  rhs="1"  variables=["x"]
+wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  range=[0, 1]
+wolfram_verify  action="integral"  integral="Integrate[Exp[-x^2], {x, 0, 1}]"  result="Sqrt[Pi]/2 Erf[1]"
+wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
+wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
+wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"
+```
 
 手动打开面板：右侧栏的"+"→ Wolfram 笔记本（面板注册了引导页入口）。
 

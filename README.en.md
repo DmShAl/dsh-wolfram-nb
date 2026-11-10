@@ -52,6 +52,9 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
 | `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, and `status` shows the latest `Print` output |
+| `wolfram_verify` | `identity` checks an identity numerically (lhs/rhs, variables, tolerance); `ode` measures the residual of a solution on a range; `integral` compares a definite integral with its closed form |
+| `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists definitions; `save`/`load` persist the Global context via `DumpSave`/`Get` |
+| `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory and reporting the file size |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
@@ -66,7 +69,7 @@ Host plugin (index.js)
   ├─ bridge.wl: file-based JSON protocol (one file per request/response; stdout carries markers only)
   ├─ writes the result to .dsh-wolfram/latest.json (publishedAt, MathML, base64 PNG)
   ├─ wolfram_job: one extra math.exe per job, so a long run never blocks the session kernel
-  └─ registers the wolfram_eval / wolfram_notebook / wolfram_job tools
+  └─ registers the wolfram_eval / wolfram_notebook / wolfram_job / wolfram_verify / wolfram_state / wolfram_render tools
 Client plugin (client.js)
   ├─ registers the right-sidebar tab type `wolfram-notebook` (plus a guide entry)
   ├─ polls latest.json and refreshes on a new publishedAt
@@ -105,6 +108,17 @@ list (or type a path) — the panel renders it immediately and makes it the curr
 `/wolfram-open <path>` is the command form of the same action and produces no model message.
 
 To open the panel manually: right sidebar “+” → Wolfram notebook (the panel registers a guide entry).
+
+## Verifying and persisting results
+
+```
+wolfram_verify  action="identity"  lhs="Sin[x]^2 + Cos[x]^2"  rhs="1"  variables=["x"]
+wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  range=[0, 1]
+wolfram_verify  action="integral"  integral="Integrate[Exp[-x^2], {x, 0, 1}]"  result="Sqrt[Pi]/2 Erf[1]"
+wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
+wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
+wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"
+```
 
 ## Configuration
 

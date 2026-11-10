@@ -8,6 +8,7 @@ dist/
 # Plugin runtime data (inside a user workspace)
 .dsh-wolfram/
 wolfram-notebooks/
+wolfram-plots/
 
 # Editor / OS
 .vscode/
