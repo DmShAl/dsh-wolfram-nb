@@ -79,3 +79,44 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   assert.match(status.summary, /Evaluations: 1/)
 })
 
+async function waitForJob(jobTool, id, timeoutMs = 30_000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const result = await jobTool.execute({ action: 'result', id }, {})
+    if (!/still running/.test(result.summary)) return result
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error('job did not finish in time')
+}
+
+test('a submitted job runs out of process and returns its result', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const jobTool = tools.get('wolfram_job')
+  const submitted = await jobTool.execute({ action: 'submit', code: 'Total[Range[100]]' }, {})
+  const id = /id="([^"]+)"/.exec(submitted.summary)[1]
+
+  const result = await waitForJob(jobTool, id)
+  assert.match(result.summary, /5050/)
+})
+
+test('a running job can be cancelled', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const jobTool = tools.get('wolfram_job')
+  const submitted = await jobTool.execute({ action: 'submit', code: 'Pause[60]' }, {})
+  const id = /id="([^"]+)"/.exec(submitted.summary)[1]
+
+  const cancelled = await jobTool.execute({ action: 'cancel', id }, {})
+  assert.match(cancelled.summary, /cancel/i)
+
+  const status = await jobTool.execute({ action: 'status', id }, {})
+  assert.match(status.summary, /cancel/i)
+
+  const listed = await jobTool.execute({ action: 'list' }, {})
+  assert.match(listed.summary, new RegExp(id))
+})
+
+

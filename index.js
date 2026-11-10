@@ -22,6 +22,10 @@ const EXPORT_DIR = 'wolfram-notebooks'
 
 const BRIDGE_VERSION = '1.3.0'
 const DEFAULT_TIMEOUT_MS = 180_000
+const MAX_JOBS = 20
+const MAX_RUNNING_JOBS = 2
+const JOB_TTL_MS = 60 * 60_000
+const LIVE_KERNELS = new Set()
 const DEFAULT_IDLE_MS = 30 * 60_000
 const START_TIMEOUT_MS = 90_000
 
@@ -143,6 +147,7 @@ class WolframKernel {
   constructor(options) {
     this.kernelPath = options.kernelPath
     this.kernelArgs = Array.isArray(options.kernelArgs) ? options.kernelArgs : []
+    LIVE_KERNELS.add(this)
     this.cwd = options.cwd
     this.tmpDir = options.tmpDir
     this.timeoutMs = options.timeoutMs
@@ -173,6 +178,7 @@ class WolframKernel {
     this.proc = child
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
+    child.stdin.on('error', () => { /* the kernel may already be gone */ })
     child.stdout.on('data', chunk => this.onData(chunk))
     child.stderr.on('data', chunk => { this.stderr = `${this.stderr}${chunk}`.slice(-4000) })
     child.on('error', error => this.failAll(error))
@@ -270,6 +276,8 @@ class WolframKernel {
   }
 
   failAll(error) {
+    LIVE_KERNELS.delete(this)
+    clearTimeout(this.readyTimer)
     this.rejectReady?.(error)
     for (const [id, waiter] of this.waiters) {
       clearTimeout(waiter.timer)
@@ -341,6 +349,8 @@ class WolframKernel {
   }
 
   dispose() {
+    LIVE_KERNELS.delete(this)
+    clearTimeout(this.readyTimer)
     const child = this.proc
     this.proc = null
     this.readyPromise = null
@@ -360,10 +370,12 @@ export function apply(ctx, config = {}) {
   globalThis[WOLFRAM_KERNEL_KEY] = registry
 
   const stats = { evaluations: 0, timeouts: 0, restarts: 0 }
+  const jobs = new Map()
+  let jobSeq = 0
   if (globalThis[WOLFRAM_EXIT_KEY] !== true) {
     globalThis[WOLFRAM_EXIT_KEY] = true
     process.once('exit', () => {
-      for (const kernel of registry.values()) kernel.killSync()
+      for (const kernel of LIVE_KERNELS) kernel.killSync()
     })
   }
 
@@ -668,8 +680,186 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const wolframJob = {
+    name: 'wolfram_job',
+    description: [
+      'Run a Wolfram Language evaluation as a background job in its own kernel.',
+      'action=submit starts a job and returns its id; status/result/cancel/list manage it.',
+      'Use it for long computations that would otherwise hit the 180 s per-call timeout.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['submit', 'status', 'result', 'cancel', 'list'] },
+        id: { type: 'string', description: 'Job id for status/result/cancel.' },
+        code: { type: 'string', description: 'Wolfram Language source for a submit.' },
+        cells: {
+          type: 'array',
+          description: 'Ordered cells for a submit (same shape as wolfram_eval).',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['input', 'code', 'text', 'title', 'section', 'subsection', 'chapter'] },
+              code: { type: 'string' },
+              text: { type: 'string' },
+            },
+            required: ['type'],
+          },
+        },
+        title: { type: 'string', description: 'Job title / notebook title.' },
+        timeoutMs: { type: 'number', description: 'Job timeout in milliseconds (default 30 min).' },
+        exportNotebook: { type: 'boolean', description: 'Write a .nb file for the job result (default false).' },
+      },
+      required: ['action'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          summary: { type: 'string' },
+          jobId: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const action = String(args?.action ?? '')
+      const prune = () => {
+        const now = Date.now()
+        for (const [id, job] of jobs) {
+          if (job.status !== 'running' && now - (job.finishedAt ?? now) > JOB_TTL_MS) jobs.delete(id)
+        }
+        while (jobs.size > MAX_JOBS) {
+          const finished = [...jobs.entries()].find(([, job]) => job.status !== 'running')
+          if (finished === undefined) break
+          jobs.delete(finished[0])
+        }
+      }
+      if (action === 'submit') {
+        const cells = normalizeCells(args)
+        if (cells.length === 0) throw new Error('wolfram_job submit needs `code` or at least one input cell.')
+        prune()
+        if (jobs.size >= MAX_JOBS) throw new Error(`Too many jobs (max ${MAX_JOBS}); wait for finished jobs to expire.`)
+        const running = [...jobs.values()].filter((job) => job.status === 'running').length
+        if (running >= MAX_RUNNING_JOBS) throw new Error(`Too many running jobs (max ${MAX_RUNNING_JOBS}); wait or cancel one.`)
+        const requested = Number(args?.timeoutMs)
+        const jobTimeout = Number.isFinite(requested) && requested > 0 ? requested : Math.max(timeoutMs, 30 * 60_000)
+        const id = `j${++jobSeq}x${Date.now().toString(36)}`
+        const kernel = new WolframKernel({
+          kernelPath: kernelInfo().path,
+          kernelArgs,
+          cwd: context.cwd,
+          tmpDir: join(context.tmpDir, 'jobs', id),
+          timeoutMs: jobTimeout,
+        })
+        const title = typeof args?.title === 'string' ? args.title : ''
+        let nbPath = null
+        if (args?.exportNotebook === true) {
+          const dir = join(context.cwd, EXPORT_DIR)
+          mkdirSync(dir, { recursive: true })
+          nbPath = join(dir, `job-${slugify(title)}-${timestamp()}.nb`).replace(/\\/g, '/')
+        }
+        const job = {
+          id,
+          name: (title || String(args?.code ?? '')).slice(0, 80),
+          status: 'running',
+          submittedAt: Date.now(),
+          startedAt: Date.now(),
+          finishedAt: null,
+          kernel,
+          timeoutMs: jobTimeout,
+          summary: '',
+          console: '',
+          error: null,
+          cancelled: false,
+          controller: new AbortController(),
+        }
+        jobs.set(id, job)
+        job.promise = (async () => {
+          try {
+            const response = await kernel.evaluate(
+              { id, title, cells, nbPath },
+              { timeoutMs: jobTimeout, signal: job.controller.signal },
+            )
+            const document = response.document
+            if (document?.error) {
+              job.status = 'failed'
+              job.error = String(document.error)
+            } else {
+              const hints = suggestFixes(response.console)
+              job.summary = describeDocument(document, { console: response.console, panel: false })
+                + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
+              job.console = response.console
+              job.status = 'done'
+            }
+          } catch (error) {
+            job.status = job.cancelled === true ? 'cancelled' : 'failed'
+            job.error = String(error?.message ?? error)
+          } finally {
+            job.finishedAt = Date.now()
+            kernel.dispose()
+          }
+        })()
+        return {
+          ok: true,
+          summary: `Job ${id} submitted (timeout ${Math.round(jobTimeout / 60_000)} min). Poll with wolfram_job action="status" id="${id}".`,
+          jobId: id,
+        }
+      }
+      if (action === 'list') {
+        prune()
+        const lines = [...jobs.values()]
+          .sort((a, b) => a.submittedAt - b.submittedAt)
+          .map((job) => {
+            const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
+            return `${job.id}\t${job.status}\t${elapsed} s\t${job.name}`
+          })
+        return { ok: true, summary: lines.length === 0 ? 'No jobs.' : lines.join('\n'), jobId: '' }
+      }
+      const id = String(args?.id ?? '')
+      const job = jobs.get(id)
+      if (job === undefined) {
+        return { ok: false, summary: `No job with id "${id}". Use action="list" to see known jobs.`, jobId: id }
+      }
+      const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
+      if (action === 'status') {
+        const suffix = job.error === null ? '' : ` Error: ${job.error}`
+        return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}`, jobId: job.id }
+      }
+      if (action === 'cancel') {
+        if (job.status === 'running') {
+          job.cancelled = true
+          job.status = 'cancelled'
+          job.finishedAt = Date.now()
+          job.controller.abort()
+          job.kernel.killSync()
+        }
+        return { ok: true, summary: `Job ${job.id}: ${job.status}.`, jobId: job.id }
+      }
+      if (action === 'result') {
+        if (job.status === 'running') return { ok: false, summary: `Job ${job.id} is still running (${elapsed} s).`, jobId: job.id }
+        if (job.status === 'failed') return { ok: false, summary: `Job ${job.id} failed: ${job.error}`, jobId: job.id }
+        if (job.status === 'cancelled') return { ok: false, summary: `Job ${job.id} was cancelled.`, jobId: job.id }
+        return { ok: true, summary: job.summary === '' ? '(no output)' : job.summary, jobId: job.id }
+      }
+      throw new Error(`Unknown wolfram_job action: ${action}`)
+    },
+  }
+
   ctx.effect(() => ctx.tools.register(wolframEval), 'wolfram notebook: wolfram_eval tool')
   ctx.effect(() => ctx.tools.register(wolframNotebook), 'wolfram notebook: wolfram_notebook tool')
+  ctx.effect(() => ctx.tools.register(wolframJob), 'wolfram notebook: wolfram_job tool')
+
+  ctx.effect(() => () => {
+    for (const job of jobs.values()) {
+      job.cancelled = true
+      job.controller.abort()
+      job.kernel.killSync()
+    }
+    jobs.clear()
+  }, 'wolfram notebook: job kernels')
 
   const commands = typeof ctx.get === 'function' ? ctx.get('commands') : undefined
   if (commands !== undefined) {
