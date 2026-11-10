@@ -23,7 +23,7 @@ const EXPORT_DIR = 'wolfram-notebooks'
 const BRIDGE_VERSION = '1.3.0'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
-const MAX_RUNNING_JOBS = 2
+const DEFAULT_MAX_RUNNING_JOBS = 4
 const JOB_TTL_MS = 60 * 60_000
 const LIVE_KERNELS = new Set()
 const DEFAULT_IDLE_MS = 30 * 60_000
@@ -374,6 +374,7 @@ export function apply(ctx, config = {}) {
   const stats = { evaluations: 0, timeouts: 0, restarts: 0 }
   const jobs = new Map()
   let jobSeq = 0
+  let runningJobs = 0
   if (globalThis[WOLFRAM_EXIT_KEY] !== true) {
     globalThis[WOLFRAM_EXIT_KEY] = true
     process.once('exit', () => {
@@ -385,6 +386,9 @@ export function apply(ctx, config = {}) {
   const kernelArgs = Array.isArray(config?.kernelArgs)
     ? config.kernelArgs.filter((arg) => typeof arg === 'string' && arg.trim() !== '')
     : []
+  const maxRunningJobs = Number.isFinite(config?.maxRunningJobs) && config.maxRunningJobs > 0
+    ? Math.floor(config.maxRunningJobs)
+    : DEFAULT_MAX_RUNNING_JOBS
   const timeoutMs = Number.isFinite(config?.timeoutMs) ? config.timeoutMs : DEFAULT_TIMEOUT_MS
   const idleMs = Number.isFinite(config?.idleMs) ? config.idleMs : DEFAULT_IDLE_MS
 
@@ -682,6 +686,62 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const startJob = (job) => {
+    runningJobs += 1
+    job.status = 'running'
+    job.startedAt = Date.now()
+    const kernel = new WolframKernel({
+      kernelPath: kernelInfo().path,
+      kernelArgs,
+      cwd: job.cwd,
+      tmpDir: join(job.tmpDir, 'jobs', job.id),
+      timeoutMs: job.timeoutMs,
+    })
+    job.kernel = kernel
+    job.promise = (async () => {
+      try {
+        const response = await kernel.evaluate(
+          { id: job.id, title: job.title, cells: job.cells, nbPath: job.nbPath },
+          {
+            timeoutMs: job.timeoutMs,
+            signal: job.controller.signal,
+            onOutput: (line) => {
+              if (job.progress[job.progress.length - 1] !== line) job.progress.push(line)
+              if (job.progress.length > 20) job.progress.shift()
+            },
+          },
+        )
+        const document = response.document
+        if (document?.error) {
+          job.status = 'failed'
+          job.error = String(document.error)
+        } else {
+          const hints = suggestFixes(response.console)
+          job.summary = describeDocument(document, { console: response.console, panel: false })
+            + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
+          job.console = response.console
+          job.status = 'done'
+        }
+      } catch (error) {
+        job.status = job.cancelled === true ? 'cancelled' : 'failed'
+        if (job.cancelled !== true) job.error = String(error?.message ?? error)
+      } finally {
+        job.finishedAt = job.finishedAt ?? Date.now()
+        kernel.dispose()
+        runningJobs -= 1
+        pumpJobs()
+      }
+    })()
+  }
+
+  const pumpJobs = () => {
+    while (runningJobs < maxRunningJobs) {
+      const next = [...jobs.values()].find((job) => job.status === 'queued')
+      if (next === undefined) return
+      startJob(next)
+    }
+  }
+
   const wolframJob = {
     name: 'wolfram_job',
     description: [
@@ -731,10 +791,12 @@ export function apply(ctx, config = {}) {
       const prune = () => {
         const now = Date.now()
         for (const [id, job] of jobs) {
-          if (job.status !== 'running' && now - (job.finishedAt ?? now) > JOB_TTL_MS) jobs.delete(id)
+          if (job.status !== 'running' && job.status !== 'queued'
+            && now - (job.finishedAt ?? now) > JOB_TTL_MS) jobs.delete(id)
         }
         while (jobs.size > MAX_JOBS) {
-          const finished = [...jobs.entries()].find(([, job]) => job.status !== 'running')
+          const finished = [...jobs.entries()]
+            .find(([, job]) => job.status !== 'running' && job.status !== 'queued')
           if (finished === undefined) break
           jobs.delete(finished[0])
         }
@@ -744,18 +806,9 @@ export function apply(ctx, config = {}) {
         if (cells.length === 0) throw new Error('wolfram_job submit needs `code` or at least one input cell.')
         prune()
         if (jobs.size >= MAX_JOBS) throw new Error(`Too many jobs (max ${MAX_JOBS}); wait for finished jobs to expire.`)
-        const running = [...jobs.values()].filter((job) => job.status === 'running').length
-        if (running >= MAX_RUNNING_JOBS) throw new Error(`Too many running jobs (max ${MAX_RUNNING_JOBS}); wait or cancel one.`)
         const requested = Number(args?.timeoutMs)
         const jobTimeout = Number.isFinite(requested) && requested > 0 ? requested : Math.max(timeoutMs, 30 * 60_000)
         const id = `j${++jobSeq}x${Date.now().toString(36)}`
-        const kernel = new WolframKernel({
-          kernelPath: kernelInfo().path,
-          kernelArgs,
-          cwd: context.cwd,
-          tmpDir: join(context.tmpDir, 'jobs', id),
-          timeoutMs: jobTimeout,
-        })
         const title = typeof args?.title === 'string' ? args.title : ''
         let nbPath = null
         if (args?.exportNotebook === true) {
@@ -766,11 +819,11 @@ export function apply(ctx, config = {}) {
         const job = {
           id,
           name: (title || String(args?.code ?? '')).slice(0, 80),
-          status: 'running',
+          status: 'queued',
           submittedAt: Date.now(),
-          startedAt: Date.now(),
+          startedAt: null,
           finishedAt: null,
-          kernel,
+          kernel: null,
           timeoutMs: jobTimeout,
           summary: '',
           console: '',
@@ -778,43 +831,18 @@ export function apply(ctx, config = {}) {
           error: null,
           cancelled: false,
           controller: new AbortController(),
+          cwd: context.cwd,
+          tmpDir: context.tmpDir,
+          title,
+          cells,
+          nbPath,
         }
         jobs.set(id, job)
-        job.promise = (async () => {
-          try {
-            const response = await kernel.evaluate(
-              { id, title, cells, nbPath },
-              {
-                timeoutMs: jobTimeout,
-                signal: job.controller.signal,
-                onOutput: (line) => {
-                  if (job.progress[job.progress.length - 1] !== line) job.progress.push(line)
-                  if (job.progress.length > 20) job.progress.shift()
-                },
-              },
-            )
-            const document = response.document
-            if (document?.error) {
-              job.status = 'failed'
-              job.error = String(document.error)
-            } else {
-              const hints = suggestFixes(response.console)
-              job.summary = describeDocument(document, { console: response.console, panel: false })
-                + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
-              job.console = response.console
-              job.status = 'done'
-            }
-          } catch (error) {
-            job.status = job.cancelled === true ? 'cancelled' : 'failed'
-            if (job.cancelled !== true) job.error = String(error?.message ?? error)
-          } finally {
-            job.finishedAt = Date.now()
-            kernel.dispose()
-          }
-        })()
+        pumpJobs()
+        const state = job.status === 'queued' ? 'queued' : 'submitted'
         return {
           ok: true,
-          summary: `Job ${id} submitted (timeout ${Math.round(jobTimeout / 60_000)} min). Poll with wolfram_job action="status" id="${id}".`,
+          summary: `Job ${id} ${state} (timeout ${Math.round(jobTimeout / 60_000)} min). Poll with wolfram_job action="status" id="${id}".`,
           jobId: id,
         }
       }
@@ -836,22 +864,29 @@ export function apply(ctx, config = {}) {
       const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
       if (action === 'status') {
         const suffix = job.status === 'failed' && job.error !== null ? ` Error: ${job.error}` : ''
-        const progress = job.status === 'running' && job.progress.length > 0
-          ? `\nProgress:\n${job.progress.slice(-10).join('\n')}`
-          : ''
-        return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${progress}`, jobId: job.id }
+        let extra = ''
+        if (job.status === 'queued') {
+          const position = [...jobs.values()]
+            .filter((item) => item.status === 'queued')
+            .findIndex((item) => item.id === job.id) + 1
+          extra = `\nPosition in queue: ${position}.`
+        } else if (job.status === 'running' && job.progress.length > 0) {
+          extra = `\nProgress:\n${job.progress.slice(-10).join('\n')}`
+        }
+        return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${extra}`, jobId: job.id }
       }
       if (action === 'cancel') {
-        if (job.status === 'running') {
+        if (job.status === 'running' || job.status === 'queued') {
           job.cancelled = true
           job.status = 'cancelled'
           job.finishedAt = Date.now()
           job.controller.abort()
-          job.kernel.killSync()
+          if (job.kernel !== null) job.kernel.killSync()
         }
         return { ok: true, summary: `Job ${job.id}: ${job.status}.`, jobId: job.id }
       }
       if (action === 'result') {
+        if (job.status === 'queued') return { ok: false, summary: `Job ${job.id} is queued and has not started yet.`, jobId: job.id }
         if (job.status === 'running') return { ok: false, summary: `Job ${job.id} is still running (${elapsed} s).`, jobId: job.id }
         if (job.status === 'failed') return { ok: false, summary: `Job ${job.id} failed: ${job.error}`, jobId: job.id }
         if (job.status === 'cancelled') return { ok: false, summary: `Job ${job.id} was cancelled.`, jobId: job.id }

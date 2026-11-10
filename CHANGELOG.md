@@ -13,6 +13,10 @@
   timeout, 20 jobs kept (2 running at once), finished jobs expire after an hour.
 ### Changed
 
+- **Configurable job concurrency.** `maxRunningJobs` (default 4) caps concurrent jobs;
+  submissions beyond it wait in a FIFO queue (`queued`, with a queue position) instead of
+  being rejected.
+
 - **Job progress.** `wolfram_job status` now includes the last console lines a running
   job printed (`Print` output), so long jobs are observable while they run.
 

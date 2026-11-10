@@ -146,4 +146,25 @@ test('a running job can be cancelled', async (t) => {
   assert.match(listed.summary, new RegExp(id))
 })
 
+test('jobs beyond maxRunningJobs wait in a queue', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000, maxRunningJobs: 1 })
+  teardown(t, cleanups)
+
+  const jobTool = tools.get('wolfram_job')
+  const first = await jobTool.execute({ action: 'submit', code: 'Pause[4]; 1' }, {})
+  const firstId = /id="([^"]+)"/.exec(first.summary)[1]
+  const second = await jobTool.execute({ action: 'submit', code: '2 + 2' }, {})
+  const secondId = /id="([^"]+)"/.exec(second.summary)[1]
+
+  const queued = await jobTool.execute({ action: 'status', id: secondId }, {})
+  assert.match(queued.summary, /queued/)
+
+  const firstResult = await waitForJob(jobTool, firstId)
+  assert.match(firstResult.summary, /Out: 1/)
+
+  const secondResult = await waitForJob(jobTool, secondId)
+  assert.match(secondResult.summary, /Out: 4/)
+})
+
+
 

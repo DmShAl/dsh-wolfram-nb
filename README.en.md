@@ -118,6 +118,7 @@ Override the row's `config` in the profile's `cordis.patch.yml`:
     timeoutMs: 180000
     idleMs: 1800000
     # kernelArgs: ['-pacletreadonly']   # optional
+    # maxRunningJobs: 4                 # optional
 ```
 
 | Field | Default | Meaning |
@@ -126,6 +127,7 @@ Override the row's `config` in the profile's `cordis.patch.yml`:
 | `timeoutMs` | 180000 | Per-request timeout; on expiry the kernel is killed |
 | `idleMs` | 1800000 | How long an idle kernel is kept before being reclaimed |
 | `kernelArgs` | `[]` | Extra arguments passed to `math.exe`, e.g. `['-pacletreadonly']` to disable paclet auto-updates |
+| `maxRunningJobs` | `4` | How many jobs may run at once; extra submissions wait in a FIFO queue |
 
 `wolfram_eval` also accepts a per-call `timeoutMs` (milliseconds) that overrides the configured
 default; timeout errors now include the kernel's last output lines.

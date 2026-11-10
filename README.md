@@ -112,6 +112,7 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
     timeoutMs: 180000
     idleMs: 1800000
     # kernelArgs: ['-pacletreadonly']   # 可选
+    # maxRunningJobs: 4                 # 可选
 ```
 
 | 字段 | 默认 | 说明 |
@@ -120,6 +121,7 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 | `timeoutMs` | 180000 | 单次请求超时，超时会杀掉内核 |
 | `idleMs` | 1800000 | 空闲内核回收时间 |
 | `kernelArgs` | `[]` | 传给 `math.exe` 的附加参数，例如 `['-pacletreadonly']`：关闭 paclet 自动更新，避免联网卡死 |
+| `maxRunningJobs` | `4` | 同时运行的作业数上限；超出的任务进入 FIFO 队列 |
 
 `wolfram_eval` 还接受单次调用的 `timeoutMs`（毫秒），覆盖上面的默认值；超时时错误信息会
 附上内核最后几行输出，便于判断是否卡在下载上。
