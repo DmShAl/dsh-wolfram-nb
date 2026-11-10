@@ -115,6 +115,7 @@ Override the row's `config` in the profile's `cordis.patch.yml`:
     kernel: 'C:\Program Files\Wolfram Research\Wolfram\15.0\math.exe'
     timeoutMs: 180000
     idleMs: 1800000
+    # kernelArgs: ['-pacletreadonly']   # optional
 ```
 
 | Field | Default | Meaning |
@@ -122,6 +123,10 @@ Override the row's `config` in the profile's `cordis.patch.yml`:
 | `kernel` | auto-detect | Path to `math.exe`, the kernel's directory, or a product directory holding version subdirectories |
 | `timeoutMs` | 180000 | Per-request timeout; on expiry the kernel is killed |
 | `idleMs` | 1800000 | How long an idle kernel is kept before being reclaimed |
+| `kernelArgs` | `[]` | Extra arguments passed to `math.exe`, e.g. `['-pacletreadonly']` to disable paclet auto-updates |
+
+`wolfram_eval` also accepts a per-call `timeoutMs` (milliseconds) that overrides the configured
+default; timeout errors now include the kernel's last output lines.
 
 ### Kernel discovery order (works with non-default installs)
 

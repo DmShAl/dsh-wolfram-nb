@@ -120,6 +120,7 @@ const WOLFRAM_KERNEL_KEY = Symbol.for('dsh.wolfram.kernels')
 class WolframKernel {
   constructor(options) {
     this.kernelPath = options.kernelPath
+    this.kernelArgs = Array.isArray(options.kernelArgs) ? options.kernelArgs : []
     this.cwd = options.cwd
     this.tmpDir = options.tmpDir
     this.timeoutMs = options.timeoutMs
@@ -141,7 +142,7 @@ class WolframKernel {
 
   async start() {
     mkdirSync(this.tmpDir, { recursive: true })
-    const child = spawn(this.kernelPath, ['-noprompt'], {
+    const child = spawn(this.kernelPath, ['-noprompt', ...this.kernelArgs], {
       cwd: this.cwd,
       env: process.env,
       windowsHide: true,
@@ -276,8 +277,11 @@ class WolframKernel {
       : this.timeoutMs
     return new Promise((resolvePromise, rejectPromise) => {
       const timer = setTimeout(() => {
+        const waiter = this.waiters.get(id)
+        const consoleTail = (waiter?.console ?? []).slice(-8).join('\n').trim()
         this.waiters.delete(id)
-        rejectPromise(new Error(`Wolfram evaluation timed out after ${Math.round(timeoutMs / 1000)} s.`))
+        const suffix = consoleTail === '' ? '' : `\nLast kernel output:\n${consoleTail}`
+        rejectPromise(new Error(`Wolfram evaluation timed out after ${Math.round(timeoutMs / 1000)} s.${suffix}`))
         this.dispose()
       }, timeoutMs)
       this.waiters.set(id, {
@@ -318,6 +322,9 @@ export function apply(ctx, config = {}) {
   globalThis[WOLFRAM_KERNEL_KEY] = registry
 
   const configuredKernel = config?.kernel ?? ''
+  const kernelArgs = Array.isArray(config?.kernelArgs)
+    ? config.kernelArgs.filter((arg) => typeof arg === 'string' && arg.trim() !== '')
+    : []
   const timeoutMs = Number.isFinite(config?.timeoutMs) ? config.timeoutMs : DEFAULT_TIMEOUT_MS
   const idleMs = Number.isFinite(config?.idleMs) ? config.idleMs : DEFAULT_IDLE_MS
 
@@ -375,13 +382,18 @@ export function apply(ctx, config = {}) {
     return join(dir, LATEST_NAME)
   }
 
-  const evaluateRequest = async (context, request) => {
+  const evaluateRequest = async (context, request, options = {}) => {
     const kernel = kernelFor(context.sessionId, {
       kernelPath: kernelInfo().path,
+      kernelArgs,
       cwd: context.cwd,
       tmpDir: context.tmpDir,
     })
-    return kernel.evaluate(request, { signal: context.signal, timeoutMs })
+    const perCallTimeout = Number(options.timeoutMs)
+    const effectiveTimeout = Number.isFinite(perCallTimeout) && perCallTimeout > 0
+      ? perCallTimeout
+      : timeoutMs
+    return kernel.evaluate(request, { signal: context.signal, timeoutMs: effectiveTimeout })
   }
 
   /** Read a .nb through the kernel and publish its document to the panel. */
@@ -457,6 +469,10 @@ export function apply(ctx, config = {}) {
           type: 'boolean',
           description: 'Restart the kernel before evaluating this call (drops earlier definitions).',
         },
+        timeoutMs: {
+          type: 'number',
+          description: 'Per-call timeout in milliseconds; overrides the configured default and restarts the kernel when it elapses.',
+        },
       },
     },
     output: {
@@ -485,12 +501,16 @@ export function apply(ctx, config = {}) {
         mkdirSync(dir, { recursive: true })
         nbPath = join(dir, `${slugify(title)}-${timestamp()}.nb`).replace(/\\/g, '/')
       }
+      const requestedTimeout = Number(args?.timeoutMs)
+      const callTimeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+        ? requestedTimeout
+        : undefined
       const response = await evaluateRequest(context, {
         id: `eval-${Date.now()}`,
         title,
         cells,
         nbPath: nbPath ?? null,
-      })
+      }, { timeoutMs: callTimeout })
       const document = response.document
       if (document?.error) {
         return {
@@ -566,9 +586,12 @@ export function apply(ctx, config = {}) {
         } catch (error) {
           discovery = `Kernel discovery failed: ${error.message ?? error}`
         }
+        const runtime = kernel === undefined
+          ? ''
+          : ` Args: ${kernel.kernelArgs.length === 0 ? 'none' : kernel.kernelArgs.join(' ')}. Timeout: ${Math.round(kernel.timeoutMs / 1000)} s.`
         const summary = kernel === undefined
           ? `No kernel is running for this session (${context.cwd}). ${discovery}`
-          : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
+          : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery}${runtime} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
         return { ok: true, summary, notebookPath: '' }
       }
       const requested = String(args?.path ?? '').trim()

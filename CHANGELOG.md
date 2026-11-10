@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`kernelArgs` config.** Extra argv entries for `math.exe`, e.g. `['-pacletreadonly']` to keep
+  paclet auto-updates (and their network stalls) out of the way.
+- **Per-call `timeoutMs`** on `wolfram_eval`, overriding the configured default for one call.
+
+### Changed
+
+- **Timeout errors carry the kernel console.** The last lines the kernel printed are appended to
+  the timeout message, so a stalled download is visible instead of a bare "timed out".
+- `wolfram_notebook action="status"` now reports the kernel arguments and the timeout.
+
 ## 1.2.0 — 2026-11-07
 
 ### Added

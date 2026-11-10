@@ -109,6 +109,7 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
     kernel: 'C:\Program Files\Wolfram Research\Wolfram\15.0\math.exe'
     timeoutMs: 180000
     idleMs: 1800000
+    # kernelArgs: ['-pacletreadonly']   # 可选
 ```
 
 | 字段 | 默认 | 说明 |
@@ -116,6 +117,10 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 | `kernel` | 自动探测 | `math.exe` 路径、内核所在目录，或包含版本子目录的产品目录 |
 | `timeoutMs` | 180000 | 单次请求超时，超时会杀掉内核 |
 | `idleMs` | 1800000 | 空闲内核回收时间 |
+| `kernelArgs` | `[]` | 传给 `math.exe` 的附加参数，例如 `['-pacletreadonly']`：关闭 paclet 自动更新，避免联网卡死 |
+
+`wolfram_eval` 还接受单次调用的 `timeoutMs`（毫秒），覆盖上面的默认值；超时时错误信息会
+附上内核最后几行输出，便于判断是否卡在下载上。
 
 ### 内核探测顺序（适配不同安装位置）
 
