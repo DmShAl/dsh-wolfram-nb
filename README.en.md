@@ -55,6 +55,7 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_verify` | `identity` checks an identity numerically (lhs/rhs, variables, tolerance); `ode` measures the residual of a solution on a range; `integral` compares a definite integral with its closed form |
 | `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists definitions; `save`/`load` persist the Global context via `DumpSave`/`Get` |
 | `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory and reporting the file size |
+| `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
@@ -69,7 +70,7 @@ Host plugin (index.js)
   ├─ bridge.wl: file-based JSON protocol (one file per request/response; stdout carries markers only)
   ├─ writes the result to .dsh-wolfram/latest.json (publishedAt, MathML, base64 PNG)
   ├─ wolfram_job: one extra math.exe per job, so a long run never blocks the session kernel
-  └─ registers the wolfram_eval / wolfram_notebook / wolfram_job / wolfram_verify / wolfram_state / wolfram_render tools
+  └─ registers the wolfram_eval / wolfram_notebook / wolfram_job / wolfram_verify / wolfram_state / wolfram_render / wolfram_batch tools
 Client plugin (client.js)
   ├─ registers the right-sidebar tab type `wolfram-notebook` (plus a guide entry)
   ├─ polls latest.json and refreshes on a new publishedAt
@@ -119,6 +120,10 @@ wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
 wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
 wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"
 ```
+
+If `Integrate`/`Solve`/`DSolve` returns itself unchanged, the summary names the likely
+next step (`Reduce`, `NIntegrate`, `NDSolve`, ...). Use `wolfram_batch` for independent runs
+(one kernel per item).
 
 ## Configuration
 

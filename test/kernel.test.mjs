@@ -283,5 +283,44 @@ test('wolfram_render exports a plot to PNG', async (t) => {
   unlinkSync('wolfram-plots/render-test.png')
 })
 
+test('an unevaluated symbolic result gets an inert-result hint', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_eval').execute(
+    { code: 'Solve[Cos[x] == x, x]', exportNotebook: false },
+    {},
+  )
+
+  assert.match(result.summary, /unevaluated/i)
+  assert.match(result.summary, /Reduce/)
+})
+
+test('a solved symbolic result does not get an inert-result hint', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_eval').execute(
+    { code: "DSolve[y'[x] == y[x], y[x], x]", exportNotebook: false },
+    {},
+  )
+
+  assert.doesNotMatch(result.summary, /unevaluated/i)
+})
+
+test('wolfram_batch evaluates several codes in parallel kernels', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_batch').execute({
+    codes: ['1 + 1', '2 + 2'],
+    maxParallel: 2,
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /Out: 2/)
+  assert.match(result.summary, /Out: 4/)
+})
+
 
 

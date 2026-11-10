@@ -24,6 +24,8 @@ const BRIDGE_VERSION = '1.3.0'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
 const DEFAULT_MAX_RUNNING_JOBS = 4
+const DEFAULT_BATCH_PARALLEL = 4
+const MAX_BATCH = 12
 const JOB_TTL_MS = 60 * 60_000
 const LIVE_KERNELS = new Set()
 const DEFAULT_IDLE_MS = 30 * 60_000
@@ -58,6 +60,21 @@ function suggestFixes(text) {
   }
   return hints
 }
+
+/** Heads whose unevaluated result usually means "try another method". */
+const INERT_ADVICE = {
+  Integrate: 'use NIntegrate for a numeric value, or add Assumptions',
+  Solve: 'try Reduce, NSolve or FindInstance',
+  Reduce: 'try Solve, FindInstance or numeric methods',
+  DSolve: 'try NDSolve, or add Method/Assumptions',
+  NDSolve: 'check the range and the initial conditions',
+  Simplify: 'try Together/TrigExpand/PowerExpand, or add Assumptions',
+  FullSimplify: 'try Simplify with Assumptions',
+  Limit: 'check Direction and Assumptions',
+  Sum: 'try NSum or a numeric evaluation',
+  Series: 'check the expansion point and order',
+}
+const INERT_PATTERN = /^(Integrate|Solve|Reduce|DSolve|NDSolve|Simplify|FullSimplify|Limit|Sum|Series)\[/
 
 /** Quote a Wolfram Language string literal. */
 function wlString(value) {
@@ -134,6 +151,7 @@ function normalizeCells(args) {
 
 function describeDocument(document, extra) {
   const lines = []
+  const inert = []
   const title = String(document?.title ?? '').trim()
   if (title !== '') lines.push(`# ${title}`)
   for (const cell of document?.cells ?? []) {
@@ -153,6 +171,10 @@ function describeDocument(document, extra) {
     }
     if (kind === 'expression') {
       lines.push(`Out: ${truncate(cell.inputForm, 1200)}`)
+      const source = String(cell?.source ?? '').trim().replace(/\s+/g, ' ')
+      const form = String(cell?.inputForm ?? '').trim().replace(/\s+/g, ' ')
+      const match = INERT_PATTERN.exec(form)
+      if (match !== null && form === source) inert.push(match[1])
     } else if (kind === 'graphics') {
       lines.push(cell.graphicsFailed === true
         ? 'Out: [graphics could not be rasterized]'
@@ -169,6 +191,11 @@ function describeDocument(document, extra) {
     }
   }
   const console = String(extra?.console ?? '').trim()
+  if (inert.length > 0) {
+    const heads = [...new Set(inert)]
+    const advice = heads.map((head) => `${head}: ${INERT_ADVICE[head] ?? 'try another method'}`).join('; ')
+    lines.push(`Hint: the symbolic call returned unevaluated — ${advice}.`)
+  }
   if (console !== '') lines.push(`Console:\n${truncate(console, 1500)}`)
   if (extra?.notebookPath) lines.push(`Notebook file: ${extra.notebookPath}`)
   if (extra?.panel === true) {
@@ -1243,12 +1270,115 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const wolframBatch = {
+    name: 'wolfram_batch',
+    description: [
+      'Run several independent Wolfram Language snippets, each in its own kernel, and collect the results.',
+      'Use it for parameter sweeps where every item is independent; `maxParallel` kernels run at once.',
+      'Each item is evaluated from scratch, so definitions from wolfram_eval are not visible.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        codes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Wolfram Language snippets, one per kernel.',
+        },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              code: { type: 'string' },
+              title: { type: 'string' },
+            },
+            required: ['code'],
+          },
+          description: 'Richer form of `codes`: each item may carry a title.',
+        },
+        maxParallel: { type: 'number', description: 'Concurrent kernels (default 4).' },
+        timeoutMs: { type: 'number', description: 'Per-item timeout in milliseconds (default: configured).' },
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, summary: { type: 'string' }, items: { type: 'integer' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const raw = Array.isArray(args?.items)
+        ? args.items
+        : Array.isArray(args?.codes) ? args.codes.map((code) => ({ code })) : []
+      const items = raw
+        .slice(0, MAX_BATCH)
+        .map((item) => ({ code: String(item?.code ?? ''), title: String(item?.title ?? '') }))
+        .filter((item) => item.code.trim() !== '')
+      if (items.length === 0) throw new Error('wolfram_batch needs `codes` or `items` with a `code`.')
+      const parallel = Math.max(1, Math.min(items.length, Math.floor(Number(args?.maxParallel) || DEFAULT_BATCH_PARALLEL)))
+      const perItemTimeout = Number.isFinite(Number(args?.timeoutMs)) && Number(args.timeoutMs) > 0
+        ? Number(args.timeoutMs)
+        : timeoutMs
+      const results = new Array(items.length)
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < items.length) {
+          const index = cursor
+          cursor += 1
+          const item = items[index]
+          const kernel = new WolframKernel({
+            kernelPath: kernelInfo().path,
+            kernelArgs,
+            cwd: context.cwd,
+            tmpDir: join(context.tmpDir, 'batch', `item-${index + 1}`),
+            timeoutMs: perItemTimeout,
+          })
+          try {
+            const response = await kernel.evaluate({
+              id: `batch-${index + 1}`,
+              title: item.title,
+              cells: [{ type: 'input', code: item.code }],
+            }, { timeoutMs: perItemTimeout })
+            const document = response.document
+            if (document?.error) {
+              results[index] = { ok: false, summary: String(document.error) }
+            } else {
+              const hints = suggestFixes(response.console)
+              results[index] = {
+                ok: true,
+                summary: describeDocument(document, { console: response.console })
+                  + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`),
+              }
+            }
+          } catch (error) {
+            results[index] = { ok: false, summary: String(error?.message ?? error) }
+          } finally {
+            kernel.dispose()
+          }
+        }
+      }
+      const started = Date.now()
+      await Promise.all(Array.from({ length: parallel }, worker))
+      const okCount = results.filter((result) => result.ok).length
+      const seconds = ((Date.now() - started) / 1000).toFixed(1)
+      const lines = [`Batch: ${items.length} item(s), ${okCount} ok, ${items.length - okCount} failed in ${seconds} s (parallel ${parallel}).`]
+      results.forEach((result, index) => {
+        lines.push(`[${index + 1}] ${result.ok ? 'OK' : 'FAILED'}: ${truncate(result.summary, 800)}`)
+      })
+      return { ok: okCount === items.length, summary: lines.join('\n'), items: items.length }
+    },
+  }
+
   ctx.effect(() => ctx.tools.register(wolframEval), 'wolfram notebook: wolfram_eval tool')
   ctx.effect(() => ctx.tools.register(wolframNotebook), 'wolfram notebook: wolfram_notebook tool')
   ctx.effect(() => ctx.tools.register(wolframJob), 'wolfram notebook: wolfram_job tool')
   ctx.effect(() => ctx.tools.register(wolframVerify), 'wolfram notebook: wolfram_verify tool')
   ctx.effect(() => ctx.tools.register(wolframState), 'wolfram notebook: wolfram_state tool')
   ctx.effect(() => ctx.tools.register(wolframRender), 'wolfram notebook: wolfram_render tool')
+  ctx.effect(() => ctx.tools.register(wolframBatch), 'wolfram notebook: wolfram_batch tool')
 
   ctx.effect(() => () => {
     for (const job of jobs.values()) {

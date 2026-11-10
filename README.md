@@ -52,6 +52,7 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_verify` | `identity` — численная проверка тождества (lhs/rhs, переменные, допуск); `ode` — невязка решения ОДУ на отрезке; `integral` — сверка определённого интеграла с замкнутой формой |
 | `wolfram_state` | `status` — число Global-символов, память, `$Assumptions`, пакеты; `symbols` — список определений; `save`/`load` — `DumpSave`/`Get` состояния в `.dsh-wolfram/state-*.mx` |
 | `wolfram_render` | экспорт `Plot`/`Graphics` в PNG/SVG/PDF/JPG с `ImageResolution`; создаёт каталог и возвращает размер файла |
+| `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |
@@ -111,6 +112,10 @@ wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
 wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
 wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"
 ```
+
+Если `Integrate`/`Solve`/`DSolve` вернули выражение без изменений, в summary появится
+подсказка (`Reduce`, `NIntegrate`, `NDSolve`, ...). Для независимых прогонов используйте
+`wolfram_batch` (каждый элемент — отдельное ядро).
 
 手动打开面板：右侧栏的"+"→ Wolfram 笔记本（面板注册了引导页入口）。
 

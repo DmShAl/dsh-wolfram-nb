@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0 — 2026-11-11
+
+### Added
+
+- **`wolfram_batch` tool.** Run several independent Wolfram Language snippets, each in its own
+  kernel, with `maxParallel` concurrency (default 4, up to 12 items), per-item timeouts, and a
+  per-item OK/FAILED report.
+
+### Changed
+
+- **Inert-result diagnostics.** When `Integrate`/`Solve`/`Reduce`/`DSolve`/`Simplify`/`Limit`/
+  `Sum`/`Series` returns itself unchanged, the summary now names the likely next step
+  (`Solve` → `Reduce`/`NSolve`, `Integrate` → `NIntegrate`, ...).
+
 ## 1.3.0 — 2026-11-11
 
 ### Added
