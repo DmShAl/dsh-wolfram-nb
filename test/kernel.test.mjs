@@ -112,8 +112,11 @@ test('a running job can be cancelled', async (t) => {
   const cancelled = await jobTool.execute({ action: 'cancel', id }, {})
   assert.match(cancelled.summary, /cancel/i)
 
+  await new Promise((resolve) => setTimeout(resolve, 300))
+
   const status = await jobTool.execute({ action: 'status', id }, {})
   assert.match(status.summary, /cancel/i)
+  assert.doesNotMatch(status.summary, /Error:/)
 
   const listed = await jobTool.execute({ action: 'list' }, {})
   assert.match(listed.summary, new RegExp(id))

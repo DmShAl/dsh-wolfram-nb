@@ -796,7 +796,7 @@ export function apply(ctx, config = {}) {
             }
           } catch (error) {
             job.status = job.cancelled === true ? 'cancelled' : 'failed'
-            job.error = String(error?.message ?? error)
+            if (job.cancelled !== true) job.error = String(error?.message ?? error)
           } finally {
             job.finishedAt = Date.now()
             kernel.dispose()
@@ -825,7 +825,7 @@ export function apply(ctx, config = {}) {
       }
       const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
       if (action === 'status') {
-        const suffix = job.error === null ? '' : ` Error: ${job.error}`
+        const suffix = job.status === 'failed' && job.error !== null ? ` Error: ${job.error}` : ''
         return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}`, jobId: job.id }
       }
       if (action === 'cancel') {
