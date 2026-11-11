@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.2 — 2026-11-11
+
+### Fixed
+
+- **Auto-MaTeX in `wolfram_render`.** The `Needs["MaTeX`"]` prelude now runs in a separate cell,
+  so `MaTeX[...]` in the expression is parsed *after* MaTeX is loaded. Previously the label stayed
+  a `Global`MaTeX` expression and was drawn as literal text.
+
 ## 1.4.1 — 2026-11-11
 
 ### Added
