@@ -559,10 +559,13 @@ export function apply(ctx, config = {}) {
    * Used by wolfram_verify / wolfram_state / wolfram_render so their results do
    * not have to be reverse-engineered from the rendered notebook document.
    */
-  const evaluateMarked = async (context, code, marker) => {
+  const evaluateMarked = async (context, code, marker, prelude = '') => {
+    const cells = prelude === ''
+      ? [{ type: 'input', code }]
+      : [{ type: 'input', code: prelude }, { type: 'input', code }]
     const response = await evaluateRequest(context, {
       id: `marked-${Date.now()}`,
-      cells: [{ type: 'input', code }],
+      cells,
     })
     const document = response.document
     if (document?.error) throw new Error(String(document.error))
@@ -1263,14 +1266,14 @@ export function apply(ctx, config = {}) {
         : 200
       const file = resolveWorkspacePath(context.cwd, args?.path, join('wolfram-plots', `render-${timestamp()}.${format}`))
       mkdirSync(dirname(file), { recursive: true })
-      const maTeXPrefix = /MaTeX\s*\[/.test(expr) ? 'Quiet@Check[Needs["MaTeX`"], Null];\n' : ''
-      const code = `${maTeXPrefix}Module[{img = ${expr}, file = ${wlString(file.replace(/\\/g, '/'))}, res = ${resolution}, ok = False, bytes = 0},
+      const maTeXPrelude = /MaTeX\s*\[/.test(expr) ? 'Needs["MaTeX`"];' : ''
+      const code = `Module[{img = ${expr}, file = ${wlString(file.replace(/\\/g, '/'))}, res = ${resolution}, ok = False, bytes = 0},
   Quiet@Check[Export[file, img, ImageResolution -> res], Null];
   bytes = If[FileExistsQ[file], FileByteCount[file], 0];
   ok = bytes > 0;
   Print["${RENDER_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>, "JSON"], "\\n" -> ""]];
 ];`
-      const payload = await evaluateMarked(context, code, RENDER_MARKER)
+      const payload = await evaluateMarked(context, code, RENDER_MARKER, maTeXPrelude)
       const ok = payload.ok === true
       return {
         ok,

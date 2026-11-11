@@ -345,6 +345,12 @@ test('wolfram_render loads MaTeX automatically when the expression uses it', asy
   const bytes = readFileSync('wolfram-plots/render-matex-test.png')
   assert.equal(bytes.toString('ascii', 1, 4), 'PNG')
   unlinkSync('wolfram-plots/render-matex-test.png')
+
+  const leftovers = await tools.get('wolfram_eval').execute(
+    { code: 'MemberQ[Names["Global`*"], "MaTeX"]', exportNotebook: false },
+    {},
+  )
+  assert.match(leftovers.summary, /False/)
 })
 
 test('wolfram_state symbols hides temporary and undefined symbols', async (t) => {
