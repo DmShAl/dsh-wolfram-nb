@@ -386,5 +386,55 @@ test('wolfram_state clear drops the global definitions', async (t) => {
   assert.match(check.summary, /Out: clearMe/)
 })
 
+test('wolfram_verify proves an identity symbolically with assumptions', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'identity',
+    lhs: 'Sqrt[x^2]',
+    rhs: 'x',
+    variables: ['x'],
+    assumptions: 'x >= 0',
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /symbolic/i)
+})
+
+test('wolfram_verify still rejects an identity that only holds under assumptions', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'identity',
+    lhs: 'Sqrt[x^2]',
+    rhs: 'x',
+    variables: ['x'],
+    samples: 20,
+  }, {})
+
+  assert.equal(result.ok, false)
+  assert.match(result.summary, /FAILED/)
+})
+
+test('a job that produces graphics publishes them to the panel', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const jobTool = tools.get('wolfram_job')
+  const submitted = await jobTool.execute(
+    { action: 'submit', code: 'Plot[Sin[x], {x, 0, 2 Pi}]' },
+    {},
+  )
+  const id = /id="([^"]+)"/.exec(submitted.summary)[1]
+
+  const result = await waitForJob(jobTool, id)
+  assert.match(result.summary, /panel/i)
+
+  const latest = JSON.parse(readFileSync('.dsh-wolfram/latest.json', 'utf8'))
+  assert.ok(latest.cells.some((cell) => cell.kind === 'graphics' || cell.kind === 'image'))
+})
+
 
 

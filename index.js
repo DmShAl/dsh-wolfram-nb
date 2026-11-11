@@ -812,6 +812,16 @@ export function apply(ctx, config = {}) {
           const hints = suggestFixes(response.console)
           job.summary = describeDocument(document, { console: response.console, panel: false })
             + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
+          const hasGraphics = Array.isArray(document?.cells)
+            && document.cells.some((cell) => cell.kind === 'graphics' || cell.kind === 'image')
+          if (hasGraphics) {
+            publish(job.cwd, job.sessionId, document, {
+              notebookPath: job.nbPath ?? '',
+              prompt: job.title,
+            })
+            job.published = true
+            job.summary += '\nGraphics published to the Wolfram panel.'
+          }
           job.console = response.console
           job.status = 'done'
         }
@@ -923,8 +933,10 @@ export function apply(ctx, config = {}) {
           progress: [],
           error: null,
           cancelled: false,
+          published: false,
           controller: new AbortController(),
           cwd: context.cwd,
+          sessionId: context.sessionId,
           tmpDir: context.tmpDir,
           title,
           cells,
@@ -1020,6 +1032,10 @@ export function apply(ctx, config = {}) {
         },
         samples: { type: 'number', description: 'Number of random samples or evaluation points (default 8).' },
         tolerance: { type: 'number', description: 'Absolute tolerance (default 1e-9).' },
+        assumptions: {
+          type: 'string',
+          description: 'Assumptions for the symbolic identity check, e.g. "x >= 0".',
+        },
         ode: { type: 'string', description: 'ODE as an equation, e.g. "y\'[x] == y[x]".' },
         solution: { type: 'string', description: 'Candidate solution expression for action=ode.' },
         function: { type: 'string', description: 'Dependent function symbol (default "y").' },
@@ -1056,21 +1072,31 @@ export function apply(ctx, config = {}) {
         const vars = variables.map((name) => `Symbol[${wlString(name)}]`).join(', ')
         const lo = range ? range[0] : -5
         const hi = range ? range[1] : 5
-        const code = `Module[{lhs = ${lhs}, rhs = ${rhs}, vars = {${vars}}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, diffs, finite, maxErr, ok},
-  diffs = Table[With[{v = Table[RandomReal[{lo, hi}], {Length[vars]}]},
-    Quiet@Check[N[(lhs - rhs) /. Thread[vars -> v]], Indeterminate]], {n}];
-  finite = Select[diffs, NumericQ[#] && NumberQ[#] &];
-  maxErr = If[finite === {}, -1., Max[Abs[finite]]];
-  ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol];
-  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]];
+        const assumptions = typeof args?.assumptions === 'string' && args.assumptions.trim() !== ''
+          ? args.assumptions.trim()
+          : 'True'
+        const code = `Module[{lhs = ${lhs}, rhs = ${rhs}, vars = {${vars}}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, simplified, symbolic, diffs, finite, maxErr, ok},
+  simplified = TimeConstrained[Quiet@Check[Simplify[lhs - rhs, ${assumptions}], $Failed], 10, $Failed];
+  symbolic = simplified === 0;
+  If[symbolic,
+    finite = {}; maxErr = 0.; ok = True,
+    diffs = Table[With[{v = Table[RandomReal[{lo, hi}], {Length[vars]}]},
+      Quiet@Check[N[(lhs - rhs) /. Thread[vars -> v]], Indeterminate]], {n}];
+    finite = Select[diffs, NumericQ[#] && NumberQ[#] &];
+    maxErr = If[finite === {}, -1., Max[Abs[finite]]];
+    ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol]];
+  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite], "symbolic" -> symbolic|>, "JSON"], "\\n" -> ""]];
 ];`
         const payload = await evaluateMarked(context, code, VERIFY_MARKER)
         const maxError = Number(payload.maxError)
         const ok = payload.ok === true
+        const symbolic = payload.symbolic === true
         return {
           ok,
           summary: ok
-            ? `OK: identity holds numerically (max error ${maxError} over ${payload.samples} samples).`
+            ? symbolic
+              ? `OK: identity proved symbolically (Simplify[lhs - rhs] == 0${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}).`
+              : `OK: identity holds numerically (max error ${maxError} over ${payload.samples} samples).`
             : `FAILED: max error ${maxError < 0 ? 'could not be evaluated' : maxError} exceeds tolerance ${tolerance} over ${payload.samples} samples.`,
         }
       }

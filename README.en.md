@@ -51,8 +51,8 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 |---|---|
 | `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
-| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, and `status` shows the latest `Print` output |
-| `wolfram_verify` | `identity` checks an identity numerically (lhs/rhs, variables, tolerance); `ode` measures the residual of a solution on a range; `integral` compares a definite integral with its closed form |
+| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, `status` shows the latest `Print` output, and graphics results are published to the panel |
+| `wolfram_verify` | `identity` proves `Simplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` measures the residual; `integral` compares with its closed form |
 | `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context; `clear` drops it |
 | `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory, auto-loading MaTeX when the expression uses it |
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |

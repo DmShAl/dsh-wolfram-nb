@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 — 2026-11-11
+
+### Added
+
+- **Symbolic identity check in `wolfram_verify`.** `identity` first evaluates
+  `Simplify[lhs - rhs, assumptions]`; when the difference is exactly zero the summary says the
+  identity was proved symbolically. New `assumptions` option (e.g. `x >= 0`).
+- **Job graphics in the panel.** When a finished `wolfram_job` document contains graphics or
+  images, it is published to `.dsh-wolfram/latest.json`, so the Wolfram panel shows a
+  background plot; `result` mentions it.
+
 ## 1.4.2 — 2026-11-11
 
 ### Fixed

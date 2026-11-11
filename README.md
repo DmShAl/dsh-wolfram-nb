@@ -48,8 +48,8 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 |---|---|
 | `wolfram_eval` | 在常驻的本地内核里执行任意 Wolfram Language 代码（一个或多个单元），支持符号计算、微积分、方程求解、矩阵、单位、数据处理、文件导入导出等 |
 | `wolfram_notebook` | `open` 渲染已有的 `.nb` 文件；`reset` 重启内核；`status` 查看内核状态 |
-| `wolfram_job` | `submit` 在独立内核里后台运行长时间计算（默认 30 分钟）；`status`/`result`/`cancel`/`list` 管理任务，`status` 显示运行中任务最近的 `Print` 输出 |
-| `wolfram_verify` | `identity` — численная проверка тождества (lhs/rhs, переменные, допуск); `ode` — невязка решения ОДУ на отрезке; `integral` — сверка определённого интеграла с замкнутой формой |
+| `wolfram_job` | `submit` 在独立内核里后台运行长时间计算（默认 30 分钟）；`status`/`result`/`cancel`/`list` 管理任务，`status` 显示最近的 `Print` 输出，图形结果自动发布到面板 |
+| `wolfram_verify` | `identity` — символьная проверка `Simplify[lhs-rhs, assumptions]`, затем численная; `ode` — невязка решения ОДУ; `integral` — сверка интеграла с замкнутой формой |
 | `wolfram_state` | `status` — число Global-символов, память, `$Assumptions`, пакеты; `symbols` — определённые символы (без временных `$`); `save`/`load` — `DumpSave`/`Get`; `clear` — очистка Global |
 | `wolfram_render` | экспорт `Plot`/`Graphics` в PNG/SVG/PDF/JPG с `ImageResolution`; создаёт каталог, сам подгружает MaTeX при `MaTeX[...]` в выражении |
 | `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
