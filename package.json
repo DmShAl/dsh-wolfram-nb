@@ -3,7 +3,7 @@
   "version": "1.5.0",
   "type": "module",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/*.test.mjs"
   },
   "description": "Wolfram Language tools and a live notebook panel for DeepSeek Harness. Requires a licensed local Mathematica installation.",
   "license": "MIT",
