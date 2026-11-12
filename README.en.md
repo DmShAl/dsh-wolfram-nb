@@ -24,10 +24,10 @@ the right side of the conversation.
 **From npm (recommended):**
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.2.0
+plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.5.0
 ```
 
-The version may be omitted (defaults to `latest`), or pinned with `@1.2.0`.
+The version may be omitted (defaults to `latest`), or pinned with `@1.5.0`.
 
 **From GitHub:** clone the repository and install its root as a bundle:
 
@@ -39,6 +39,9 @@ plugin_manager install_bundle  target=<absolute path to the clone>
 **From a tarball:** `npm pack` produces `nashihang777-dsh-wolfram-nb-<version>.tgz`; extract it and
 install the extracted directory as a bundle. The tarball contains plugin code only (~28 KB) and no
 Wolfram components.
+
+**Local one-step build (Windows):** run `build-tgz.bat` to produce the tarball, or
+`build-tgz.bat install` to install it into the DSH profile. See [INSTALL.md](INSTALL.md).
 
 The target machine needs Windows and a REPL-capable `math.exe` (Mathematica, or a Wolfram Engine
 installation that ships one).

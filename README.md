@@ -22,10 +22,10 @@
 **从 npm 安装（推荐）**：
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.2.0
+plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.5.0
 ```
 
-版本号可省略（默认 `latest`），或用 `@1.2.0` 固定版本。
+版本号可省略（默认 `latest`），或用 `@1.5.0` 固定版本。
 
 **从 GitHub 安装**：克隆仓库后，把仓库根目录作为 bundle 安装：
 
@@ -36,6 +36,9 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 
 **从 tgz 安装**：`npm pack` 生成 `nashihang777-dsh-wolfram-nb-<version>.tgz`，解压后把目录作为 bundle 安装。
 分发包只含插件代码（约 25 KB），不包含任何 Wolfram 组件。
+
+**本地一键构建并安装（Windows）**：仓库根目录运行 `build-tgz.bat` 生成 tgz，
+或 `build-tgz.bat install` 直接装进 DSH 配置。详见 [INSTALL.md](INSTALL.md)。
 
 目标机器需要 Windows + 可交互的 `math.exe`（Mathematica 或含 `math.exe` 的 Wolfram Engine）。
 
