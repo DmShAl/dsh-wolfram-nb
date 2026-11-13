@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.2 — 2026-11-13
+
+### Changed
+
+- **Package renamed** from `@nashihang777/dsh-wolfram-nb` to `dsh-wolfram-nb` (unscoped).
+  The Cordis plugin id, client tab id, badges and install examples use the new name.
+
 ## 1.6.1 — 2026-11-13
 
 ### Added
@@ -139,7 +146,7 @@
 
 ## 1.1.0 — 2026-11-07
 
-First public release as `@nashihang777/dsh-wolfram-nb`.
+First public release as `dsh-wolfram-nb`.
 
 ### Fixed
 

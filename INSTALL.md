@@ -71,10 +71,10 @@ pnpm обновит `file:`-зависимость на новый tgz.
 ## Удаление
 
 ```bat
-dsh plugin --profile desktop remove @nashihang777/dsh-wolfram-nb
+dsh plugin --profile desktop remove dsh-wolfram-nb
 ```
 
-pnpm удалит пакет из зависимостей; запись `@nashihang777/dsh-wolfram-nb`
+pnpm удалит пакет из зависимостей; запись `dsh-wolfram-nb`
 в `dsh.profile.bundles` при необходимости уберите через **Plugins** в GUI
 (или отредактируйте `package.json` профиля вручную — только после удаления пакета).
 

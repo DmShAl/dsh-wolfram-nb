@@ -7,7 +7,7 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `@nashihang777/dsh-wolfram-nb` **1.6.1** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.6.1** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin --profile desktop add file:<tgz>`. Подробности в `INSTALL.md`.

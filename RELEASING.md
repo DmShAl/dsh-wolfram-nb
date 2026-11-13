@@ -70,7 +70,7 @@ workflow 的 `verify` 会检查标签与 `package.json` 版本一致，不一致
 发布后验证：
 
 ```bash
-npm view @nashihang777/dsh-wolfram-nb version
+npm view dsh-wolfram-nb version
 ```
 
 ## 手动演练（不发布）
@@ -96,7 +96,7 @@ GitHub → **Actions → publish → Run workflow**。只执行 `npm publish --d
 
 ## 备选方案：granular token（仅在 Trusted Publishing 不可用时）
 
-1. npm → Access Tokens → Granular Access Token：给 `@nashihang777` 读写权限，
+1. npm → Access Tokens → Granular Access Token：给 `dsh-wolfram-nb` 读写权限，
    勾选 **Bypass 2FA**（该选项有安全风险提示，这正是 npm 推荐 Trusted Publishing 的原因）；
 2. 令牌写入仓库 Secret `NPM_TOKEN`；
 3. 在 workflow 的 publish 步骤加回：

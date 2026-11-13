@@ -111,7 +111,7 @@ exit /b 0
 
 :usage
 echo usage: %~nx0 [install [dsh.cmd]]
-echo   no argument  build @nashihang777/dsh-wolfram-nb-^<version^>.tgz
+echo   no argument  build dsh-wolfram-nb-^<version^>.tgz
 echo   install      build, then install it through the target DSH CLI
 echo   dsh.cmd      optional DSH CLI to install into (overrides DSH_CLI above)
 exit /b 2

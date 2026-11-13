@@ -1,10 +1,10 @@
-# Wolfram Notebook for DeepSeek Harness (`@nashihang777/dsh-wolfram-nb`)
+# Wolfram Notebook for DeepSeek Harness (`dsh-wolfram-nb`)
 
 [![topic: dsh-plugin](https://img.shields.io/badge/topic-dsh--plugin-0b7285)](https://github.com/topics/dsh-plugin)
-[![npm](https://img.shields.io/npm/v/@nashihang777/dsh-wolfram-nb?label=npm)](https://www.npmjs.com/package/@nashihang777/dsh-wolfram-nb)
+[![npm](https://img.shields.io/npm/v/dsh-wolfram-nb?label=npm)](https://www.npmjs.com/package/dsh-wolfram-nb)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/nashihang777/dsh-wolfram-nb/blob/main/LICENSE)
 
-[简体中文](README.md) · **English** · [GitHub](https://github.com/nashihang777/dsh-wolfram-nb) · [npm](https://www.npmjs.com/package/@nashihang777/dsh-wolfram-nb)
+[简体中文](README.md) · **English** · [GitHub](https://github.com/nashihang777/dsh-wolfram-nb) · [npm](https://www.npmjs.com/package/dsh-wolfram-nb)
 
 ![Wolfram Notebook for DeepSeek Harness](https://raw.githubusercontent.com/nashihang777/dsh-wolfram-nb/main/assets/social-preview.png)
 
@@ -24,7 +24,7 @@ the right side of the conversation.
 **From npm (recommended):**
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.6.0
+plugin_manager install_bundle  target=dsh-wolfram-nb@1.6.0
 ```
 
 The version may be omitted (defaults to `latest`), or pinned with `@1.6.0`.
@@ -136,7 +136,7 @@ Override the row's `config` in the profile's `cordis.patch.yml`:
 
 ```yaml
 - id: wolfram-notebook
-  name: '@nashihang777/dsh-wolfram-nb'
+  name: 'dsh-wolfram-nb'
   config:
     kernel: 'C:\Program Files\Wolfram Research\Wolfram\15.0\math.exe'
     timeoutMs: 180000

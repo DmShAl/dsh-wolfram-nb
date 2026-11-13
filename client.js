@@ -3,13 +3,13 @@
  * the notebook document published by the Host tools.
  */
 window.__ModuleLoader__.load({
-  id: '@nashihang777/dsh-wolfram-nb',
+  id: 'dsh-wolfram-nb',
   factory(require) {
     const React = require('react')
     const h = React.createElement
 
     const NS = 'wolframNotebook'
-    const TAB_ID = '@nashihang777/dsh-wolfram-nb#panel'
+    const TAB_ID = 'dsh-wolfram-nb#panel'
     const KIND = 'wolfram-notebook'
     const LATEST = '.dsh-wolfram/latest.json'
     const NOTEBOOK_DIR = 'wolfram-notebooks'
