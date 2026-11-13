@@ -48,11 +48,13 @@
 
 ## Python и R
 
-- Python 3.14: `C:\Tools\Scripts\Python314\python.exe`; установлены numpy, pandas,
-  scipy 1.18.1, statsmodels 0.15.0, matplotlib 3.11.2, pyzmq 27.3.0.
+- Python 3.14: `C:\Tools\Scripts\Python314\python.exe`; научные пакеты: numpy 2.4.6,
+  pandas 3.0.3, scipy 1.18.1, statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2.
+  Также установлены pyarrow 24.0.0, pymupdf 1.28.2, pypdf 6.19.0, python-docx 1.2.0,
+  pyzmq 27.3.0 и другие пакеты; полный список можно получить через `python.exe -m pip list`.
   Мост: `ExternalEvaluate[{"Python", "C:/Tools/Scripts/Python314/python.exe"}, "..."]`.
-- R **не установлен**; при необходимости — R 4.5.x + RLink (`InstallR[]`), rJava.
-  R 4.6 с RLink не работает (нет бинарного rJava).
+- R 4.5.3 установлен в `C:\Tools\R\R-4.5.3`; пользователь подтвердил, что RLink работает.
+  При необходимости проверь, что активная Mathematica/RLink использует именно эту установку.
 
 ## Плагин: особенности
 

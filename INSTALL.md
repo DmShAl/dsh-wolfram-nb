@@ -82,7 +82,7 @@ pnpm удалит пакет из зависимостей; запись `@nashi
 
 ```bat
 npm pack
-dsh plugin --profile desktop add "file:%CD%\nashihang777-dsh-wolfram-nb-1.5.0.tgz"
+dsh plugin --profile desktop add "file:%CD%\nashihang777-dsh-wolfram-nb-1.6.0.tgz"
 ```
 
 Или в GUI: **Plugins → Add plugin** → каталог этого репозитория.

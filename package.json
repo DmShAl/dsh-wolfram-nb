@@ -1,6 +1,6 @@
 {
   "name": "@nashihang777/dsh-wolfram-nb",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"

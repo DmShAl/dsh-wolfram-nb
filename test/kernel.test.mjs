@@ -436,5 +436,102 @@ test('a job that produces graphics publishes them to the panel', async (t) => {
   assert.ok(latest.cells.some((cell) => cell.kind === 'graphics' || cell.kind === 'image'))
 })
 
+test('wolfram_verify checks an ODE solution against its initial condition', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'ode',
+    ode: "y'[x] == y[x]",
+    solution: 'Exp[x]',
+    conditions: ['y[0] == 1'],
+    range: [0, 1],
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'verified_symbolic')
+  assert.match(result.summary, /condition/i)
+})
+
+test('wolfram_verify rejects an ODE solution that fails its initial condition', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'ode',
+    ode: "y'[x] == y[x]",
+    solution: 'Exp[x]',
+    conditions: ['y[0] == 2'],
+    range: [0, 1],
+  }, {})
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'falsified')
+  assert.match(result.summary, /condition/i)
+})
+
+test('wolfram_verify proves an integral with a symbolic parameter under assumptions', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'integral',
+    integral: 'Integrate[Exp[-a x^2], {x, 0, Infinity}]',
+    result: 'Sqrt[Pi]/(2 Sqrt[a])',
+    assumptions: 'a > 0',
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'verified_symbolic')
+  assert.match(result.summary, /symbolic/i)
+})
+
+test('wolfram_verify reports an inconclusive integral instead of a false failure', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'integral',
+    integral: 'Integrate[Exp[-a x^2], {x, 0, Infinity}]',
+    result: 'Sqrt[Pi]/(2 Sqrt[a])',
+  }, {})
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'inconclusive')
+  assert.match(result.summary, /inconclusive/i)
+})
+
+test('wolfram_verify checks a claimed antiderivative', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'antiderivative',
+    integrand: 'Sin[x]',
+    result: '-Cos[x]',
+  }, {})
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'verified_symbolic')
+})
+
+test('wolfram_verify ignores session definitions that would fake a pass', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // With y defined in the persistent kernel, the old check substituted into an
+  // already-evaluated expression and accepted x^2 as a solution of y' = y.
+  await tools.get('wolfram_eval').execute({ code: 'y[x_] := Exp[x]', exportNotebook: false }, {})
+  const result = await tools.get('wolfram_verify').execute({
+    action: 'ode',
+    ode: "y'[x] == y[x]",
+    solution: 'x^2',
+    range: [0, 1],
+  }, {})
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'falsified')
+})
+
 
 

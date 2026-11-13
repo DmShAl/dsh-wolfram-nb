@@ -22,10 +22,10 @@
 **从 npm 安装（推荐）**：
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.5.0
+plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.6.0
 ```
 
-版本号可省略（默认 `latest`），或用 `@1.5.0` 固定版本。
+版本号可省略（默认 `latest`），或用 `@1.6.0` 固定版本。
 
 **从 GitHub 安装**：克隆仓库后，把仓库根目录作为 bundle 安装：
 
@@ -52,7 +52,7 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_eval` | 在常驻的本地内核里执行任意 Wolfram Language 代码（一个或多个单元），支持符号计算、微积分、方程求解、矩阵、单位、数据处理、文件导入导出等 |
 | `wolfram_notebook` | `open` 渲染已有的 `.nb` 文件；`reset` 重启内核；`status` 查看内核状态 |
 | `wolfram_job` | `submit` 在独立内核里后台运行长时间计算（默认 30 分钟）；`status`/`result`/`cancel`/`list` 管理任务，`status` 显示最近的 `Print` 输出，图形结果自动发布到面板 |
-| `wolfram_verify` | `identity` — символьная проверка `Simplify[lhs-rhs, assumptions]`, затем численная; `ode` — невязка решения ОДУ; `integral` — сверка интеграла с замкнутой формой |
+| `wolfram_verify` | независимая проверка в отдельном ядре (определения сессии не влияют): `identity` — `FullSimplify[lhs-rhs, assumptions]`, затем численная выборка; `ode` — символическая невязка решения ОДУ + необязательные `conditions` (начальные/краевые); `integral` — сверка интеграла с замкнутой формой; `antiderivative` — дифференцирование заявленной первообразной. В ответе — `status`: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
 | `wolfram_state` | `status` — число Global-символов, память, `$Assumptions`, пакеты; `symbols` — определённые символы (без временных `$`); `save`/`load` — `DumpSave`/`Get`; `clear` — очистка Global |
 | `wolfram_render` | экспорт `Plot`/`Graphics` в PNG/SVG/PDF/JPG с `ImageResolution`; создаёт каталог, сам подгружает MaTeX при `MaTeX[...]` в выражении |
 | `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
@@ -109,8 +109,9 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 
 ```
 wolfram_verify  action="identity"  lhs="Sin[x]^2 + Cos[x]^2"  rhs="1"  variables=["x"]
-wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  range=[0, 1]
-wolfram_verify  action="integral"  integral="Integrate[Exp[-x^2], {x, 0, 1}]"  result="Sqrt[Pi]/2 Erf[1]"
+wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  conditions=["y[0] == 1"]  range=[0, 1]
+wolfram_verify  action="integral"  integral="Integrate[Exp[-a x^2], {x, 0, Infinity}]"  result="Sqrt[Pi]/(2 Sqrt[a])"  assumptions="a > 0"
+wolfram_verify  action="antiderivative"  integrand="Sin[x]"  result="-Cos[x]"
 wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
 wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
 wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"

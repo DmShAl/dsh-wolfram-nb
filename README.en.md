@@ -24,10 +24,10 @@ the right side of the conversation.
 **From npm (recommended):**
 
 ```
-plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.5.0
+plugin_manager install_bundle  target=@nashihang777/dsh-wolfram-nb@1.6.0
 ```
 
-The version may be omitted (defaults to `latest`), or pinned with `@1.5.0`.
+The version may be omitted (defaults to `latest`), or pinned with `@1.6.0`.
 
 **From GitHub:** clone the repository and install its root as a bundle:
 
@@ -55,7 +55,7 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
 | `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, `status` shows the latest `Print` output, and graphics results are published to the panel |
-| `wolfram_verify` | `identity` proves `Simplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` measures the residual; `integral` compares with its closed form |
+| `wolfram_verify` | Independent checks in a throwaway kernel (session definitions cannot skew them): `identity` proves `FullSimplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` simplifies the residual and checks optional initial/boundary `conditions`; `integral` compares with its closed form; `antiderivative` differentiates the claimed antiderivative. Each result carries `status`: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
 | `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context; `clear` drops it |
 | `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory, auto-loading MaTeX when the expression uses it |
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
@@ -117,8 +117,9 @@ To open the panel manually: right sidebar “+” → Wolfram notebook (the pane
 
 ```
 wolfram_verify  action="identity"  lhs="Sin[x]^2 + Cos[x]^2"  rhs="1"  variables=["x"]
-wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  range=[0, 1]
-wolfram_verify  action="integral"  integral="Integrate[Exp[-x^2], {x, 0, 1}]"  result="Sqrt[Pi]/2 Erf[1]"
+wolfram_verify  action="ode"  ode="y'[x] == y[x]"  solution="Exp[x]"  conditions=["y[0] == 1"]  range=[0, 1]
+wolfram_verify  action="integral"  integral="Integrate[Exp[-a x^2], {x, 0, Infinity}]"  result="Sqrt[Pi]/(2 Sqrt[a])"  assumptions="a > 0"
+wolfram_verify  action="antiderivative"  integrand="Sin[x]"  result="-Cos[x]"
 wolfram_state   action="save"  path=".dsh-wolfram/derivation.mx"
 wolfram_state   action="load"  path=".dsh-wolfram/derivation.mx"
 wolfram_render  expr="Plot[Sin[x], {x, 0, 2 Pi}]"  format="svg"

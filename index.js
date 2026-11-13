@@ -1005,19 +1005,53 @@ export function apply(ctx, config = {}) {
   const STATE_MARKER = '@@WB_STATE@@'
   const RENDER_MARKER = '@@WB_RENDER@@'
 
+  /** A simple Wolfram symbol name from an optional user value. */
+  const symbolName = (value, fallback) => {
+    const name = String(value ?? '').replace(/[^A-Za-z0-9]/g, '')
+    return name === '' ? fallback : name
+  }
+
+  /** Run one input cell in a throwaway kernel: session definitions cannot leak into a check. */
+  const evaluateMarkedIsolated = async (context, code, marker) => {
+    const kernel = new WolframKernel({
+      kernelPath: kernelInfo().path,
+      kernelArgs,
+      cwd: context.cwd,
+      tmpDir: join(context.tmpDir, 'verify', `run-${Date.now()}`),
+      timeoutMs,
+    })
+    try {
+      const response = await kernel.evaluate(
+        { id: `verify-${Date.now()}`, cells: [{ type: 'input', code }] },
+        { timeoutMs },
+      )
+      const document = response.document
+      if (document?.error) throw new Error(String(document.error))
+      const payload = parseMarker(response.console, marker)
+      if (payload === null || typeof payload !== 'object') {
+        throw new Error(`The verification kernel produced no structured result. Console:\n${truncate(response.console, 1200)}`)
+      }
+      return payload
+    } finally {
+      kernel.dispose()
+    }
+  }
+
   const wolframVerify = {
     name: 'wolfram_verify',
     description: [
-      'Check a result independently instead of trusting it.',
-      'action=identity compares lhs and rhs at random points for the listed variables.',
-      'action=ode substitutes a candidate solution into an ODE and measures the residual on a range.',
-      'action=integral compares a definite integral with the claimed closed form.',
+      'Check a result independently instead of trusting it; every check runs in a throwaway kernel, so definitions left in the session cannot skew it.',
+      'action=identity proves lhs == rhs symbolically for the listed variables, and falls back to sampling.',
+      'action=ode substitutes a candidate solution into an ODE, simplifies the residual, and checks optional initial/boundary conditions.',
+      'action=integral compares a definite integral with the claimed closed form, symbolically first.',
+      'action=antiderivative differentiates the claimed antiderivative and compares it with the integrand.',
+      'status reports verified_symbolic, numerically_consistent (evidence, not proof), falsified, or inconclusive.',
       'Use it after Integrate/DSolve to catch sign, branch and algebra mistakes.',
     ].join(' '),
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['identity', 'ode', 'integral'] },
+        action: { type: 'string', enum: ['identity', 'ode', 'integral', 'antiderivative'] },
         lhs: { type: 'string', description: 'Left-hand side for action=identity.' },
         rhs: { type: 'string', description: 'Right-hand side for action=identity.' },
         variables: {
@@ -1028,27 +1062,37 @@ export function apply(ctx, config = {}) {
         range: {
           type: 'array',
           items: { type: 'number' },
-          description: 'Sample interval [lo, hi] for identity, or the ODE interval (default [-5, 5] / [0, 1]).',
+          description: 'Sample interval [lo, hi]: identity [-5, 5], ODE [0, 1], antiderivative [-5, 5].',
         },
         samples: { type: 'number', description: 'Number of random samples or evaluation points (default 8).' },
         tolerance: { type: 'number', description: 'Absolute tolerance (default 1e-9).' },
         assumptions: {
           type: 'string',
-          description: 'Assumptions for the symbolic identity check, e.g. "x >= 0".',
+          description: 'Assumptions for the symbolic check of every action, e.g. "x >= 0" or "a > 0".',
         },
         ode: { type: 'string', description: 'ODE as an equation, e.g. "y\'[x] == y[x]".' },
         solution: { type: 'string', description: 'Candidate solution expression for action=ode.' },
+        conditions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Initial/boundary conditions checked with action=ode, e.g. ["y[0] == 1"].',
+        },
         function: { type: 'string', description: 'Dependent function symbol (default "y").' },
         variable: { type: 'string', description: 'Independent variable (default "x").' },
         integral: { type: 'string', description: 'Definite integral expression, e.g. "Integrate[Exp[-x^2], {x, 0, 1}]".' },
-        result: { type: 'string', description: 'Claimed closed form for action=integral.' },
+        integrand: { type: 'string', description: 'Integrand expression for action=antiderivative, e.g. "Sin[x]".' },
+        result: { type: 'string', description: 'Claimed closed form for action=integral, or claimed antiderivative for action=antiderivative.' },
       },
       required: ['action'],
     },
     output: {
       schema: {
         type: 'object',
-        properties: { ok: { type: 'boolean' }, summary: { type: 'string' } },
+        properties: {
+          ok: { type: 'boolean' },
+          status: { type: 'string' },
+          summary: { type: 'string' },
+        },
       },
       render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
     },
@@ -1056,12 +1100,31 @@ export function apply(ctx, config = {}) {
       const context = await kernelContext(exec)
       const action = String(args?.action ?? '')
       const samples = Math.max(2, Math.min(200, Math.floor(Number(args?.samples) || 8)))
-      const tolerance = Number.isFinite(Number(args?.tolerance)) && Number(args?.tolerance) > 0
+      const tolerance = Number.isFinite(Number(args?.tolerance)) && Number(args.tolerance) > 0
         ? Number(args.tolerance)
         : 1e-9
       const range = Array.isArray(args?.range) && args.range.length === 2 && args.range.every(isFiniteNumber)
         ? args.range
         : null
+      const assumptions = typeof args?.assumptions === 'string' && args.assumptions.trim() !== ''
+        ? args.assumptions.trim()
+        : 'True'
+      const sym = symbolName(args?.variable, 'x')
+      const fun = symbolName(args?.function, 'y')
+      /** Turn a structured kernel verdict into the tool result. */
+      const verdict = (payload, { ok, symbolic, numeric, bad, inconclusive, note }) => {
+        const status = String(payload.status ?? (payload.ok === true ? 'verified_symbolic' : 'falsified'))
+        if (status === 'verified_symbolic') {
+          return { ok: true, status, summary: `OK: ${symbolic}${note === '' ? '' : ` ${note}`}` }
+        }
+        if (status === 'numerically_consistent') {
+          return { ok: true, status, summary: `OK (numerical check only, not a proof): ${numeric(payload)}${note === '' ? '' : ` ${note}`}` }
+        }
+        if (status === 'inconclusive') {
+          return { ok: false, status, summary: `INCONCLUSIVE: ${inconclusive}${note === '' ? '' : ` ${note}`}` }
+        }
+        return { ok: false, status: 'falsified', summary: `FAILED: ${bad(payload)}${note === '' ? '' : ` ${note}`}` }
+      }
       if (action === 'identity') {
         const lhs = String(args?.lhs ?? '').trim()
         const rhs = String(args?.rhs ?? '').trim()
@@ -1072,79 +1135,123 @@ export function apply(ctx, config = {}) {
         const vars = variables.map((name) => `Symbol[${wlString(name)}]`).join(', ')
         const lo = range ? range[0] : -5
         const hi = range ? range[1] : 5
-        const assumptions = typeof args?.assumptions === 'string' && args.assumptions.trim() !== ''
-          ? args.assumptions.trim()
-          : 'True'
-        const code = `Module[{lhs = ${lhs}, rhs = ${rhs}, vars = {${vars}}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, simplified, symbolic, diffs, finite, maxErr, ok},
-  simplified = TimeConstrained[Quiet@Check[Simplify[lhs - rhs, ${assumptions}], $Failed], 10, $Failed];
-  symbolic = simplified === 0;
-  If[symbolic,
-    finite = {}; maxErr = 0.; ok = True,
-    diffs = Table[With[{v = Table[RandomReal[{lo, hi}], {Length[vars]}]},
-      Quiet@Check[N[(lhs - rhs) /. Thread[vars -> v]], Indeterminate]], {n}];
+        const code = `Module[{lhs = ${lhs}, rhs = ${rhs}, vars = {${vars}}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, ass = ${assumptions}, simplified, diffs, finite, maxErr},
+  simplified = TimeConstrained[Quiet@Check[FullSimplify[lhs - rhs, ass], $Failed], 30, $Failed];
+  If[simplified === 0,
+    Print["${VERIFY_MARKER}" <> "{\\"status\\":\\"verified_symbolic\\",\\"ok\\":true,\\"maxError\\":0}"],
+    diffs = Table[With[{v = Table[RandomReal[{lo, hi}], {Length[vars]}]}, Quiet@Check[N[(lhs - rhs) /. Thread[vars -> v]], Indeterminate]], {n}];
     finite = Select[diffs, NumericQ[#] && NumberQ[#] &];
-    maxErr = If[finite === {}, -1., Max[Abs[finite]]];
-    ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol]];
-  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite], "symbolic" -> symbolic|>, "JSON"], "\\n" -> ""]];
+    If[finite === {},
+      Print["${VERIFY_MARKER}" <> "{\\"status\\":\\"inconclusive\\",\\"ok\\":false}"],
+      maxErr = Max[Abs[finite]];
+      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]]
+    ]
+  ];
 ];`
-        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
-        const maxError = Number(payload.maxError)
-        const ok = payload.ok === true
-        const symbolic = payload.symbolic === true
-        return {
-          ok,
-          summary: ok
-            ? symbolic
-              ? `OK: identity proved symbolically (Simplify[lhs - rhs] == 0${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}).`
-              : `OK: identity holds numerically (max error ${maxError} over ${payload.samples} samples).`
-            : `FAILED: max error ${maxError < 0 ? 'could not be evaluated' : maxError} exceeds tolerance ${tolerance} over ${payload.samples} samples.`,
-        }
+        const payload = await evaluateMarkedIsolated(context, code, VERIFY_MARKER)
+        return verdict(payload, {
+          symbolic: `identity proved symbolically (FullSimplify[lhs - rhs] == 0${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}).`,
+          numeric: (value) => `max error ${value.maxError} over ${value.samples} samples.`,
+          bad: (value) => `max error ${value.maxError} exceeds tolerance ${tolerance} over ${value.samples} samples.`,
+          inconclusive: 'symbolic simplification and every sampled point were inconclusive.',
+          note: '',
+        })
       }
       if (action === 'ode') {
         const ode = String(args?.ode ?? '').trim()
         const solution = String(args?.solution ?? '').trim()
         if (ode === '' || solution === '') throw new Error('wolfram_verify ode needs `ode` and `solution`.')
-        const variable = String(args?.variable ?? 'x').replace(/[^A-Za-z0-9]/g, '') || 'x'
-        const funName = String(args?.function ?? 'y').replace(/[^A-Za-z0-9]/g, '') || 'y'
+        const conditions = Array.isArray(args?.conditions)
+          ? args.conditions.map((item) => String(item).trim()).filter((item) => item !== '')
+          : []
+        const conditionList = conditions.length === 0 ? '{}' : `{${conditions.join(', ')}}`
+        const conditionNote = conditions.length === 0 ? '' : `; checked ${conditions.length} initial/boundary condition(s).`
         const lo = range ? range[0] : 0
         const hi = range ? range[1] : 1
-        const code = `Module[{ode = ${ode}, fun = ${funName}, lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, res, vals, finite, maxErr, ok},
-  res = ode /. Equal -> Subtract /. fun -> Function[{${variable}}, ${solution}];
-  vals = Table[Quiet@Check[N[res /. ${variable} -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
-  finite = Select[vals, NumericQ[#] && NumberQ[#] &];
-  maxErr = If[finite === {}, -1., Max[Abs[finite]]];
-  ok = NumberQ[maxErr] && TrueQ[maxErr >= 0 && maxErr < tol];
-  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]];
+        const code = `Module[{odeExpr = ${ode}, solExpr = ${solution}, conds = ${conditionList}, ass = ${assumptions}, fun = Symbol[${wlString(fun)}], var = Symbol[${wlString(sym)}], lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, rules, residual, condResiduals, vals, finite, condValues, maxErr, symbolic},
+  rules = {Derivative[k_Integer][fun][arg_] :> (D[solExpr, {var, k}] /. var -> arg), fun[arg_] :> (solExpr /. var -> arg)};
+  residual = Quiet@Check[FullSimplify[odeExpr /. Equal -> Subtract /. rules, ass], $Failed];
+  condResiduals = Quiet@Check[FullSimplify[# /. Equal -> Subtract /. rules, ass] & /@ conds, $Failed];
+  symbolic = residual === 0 && (condResiduals === {} || (ListQ[condResiduals] && AllTrue[condResiduals, # === 0 &]));
+  If[symbolic,
+    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0, "conditions" -> Length[conds]|>, "JSON"], "\\n" -> ""]],
+    If[condResiduals === $Failed,
+      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False, "reason" -> "conditions"|>, "JSON"], "\\n" -> ""]],
+      vals = Table[Quiet@Check[N[residual /. var -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
+      finite = Select[vals, NumericQ[#] && NumberQ[#] &];
+      condValues = Quiet@Check[N[condResiduals], {}];
+      If[finite === {} || (conds =!= {} && ! AllTrue[condValues, NumericQ[#] && NumberQ[#] &]),
+        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]],
+        maxErr = Max[Abs[finite]];
+        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "numerically_consistent", "falsified"], "ok" -> maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "maxError" -> maxErr, "samples" -> Length[finite], "conditions" -> Length[conds]|>, "JSON"], "\\n" -> ""]]
+      ]
+    ]
+  ];
 ];`
-        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
-        const maxError = Number(payload.maxError)
-        const ok = payload.ok === true
-        return {
-          ok,
-          summary: ok
-            ? `OK: the solution satisfies the ODE on [${lo}, ${hi}] (max residual ${maxError} over ${payload.samples} points).`
-            : `FAILED: residual ${maxError < 0 ? 'could not be evaluated' : maxError} exceeds tolerance ${tolerance} on [${lo}, ${hi}].`,
-        }
+        const payload = await evaluateMarkedIsolated(context, code, VERIFY_MARKER)
+        return verdict(payload, {
+          symbolic: `the solution satisfies the ODE on [${lo}, ${hi}]${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}${conditionNote}`,
+          numeric: (value) => `residual ≤ ${value.maxError} over ${value.samples} points on [${lo}, ${hi}]${conditionNote}`,
+          bad: (value) => `residual ${value.maxError === undefined ? 'or a condition residual' : value.maxError} exceeds tolerance ${tolerance} on [${lo}, ${hi}]${conditionNote}`,
+          inconclusive: 'the residual or a condition could not be evaluated on the requested range.',
+          note: `Checked in a fresh kernel on [${lo}, ${hi}].`,
+        })
       }
       if (action === 'integral') {
         const integral = String(args?.integral ?? '').trim()
         const result = String(args?.result ?? '').trim()
         if (integral === '' || result === '') throw new Error('wolfram_verify integral needs `integral` and `result`.')
-        const code = `Module[{integral = ${integral}, result = ${result}, tol = ${wlReal(tolerance)}, diff, safe, ok},
-  diff = Quiet@Check[N[Abs[integral - result]], Indeterminate];
-  ok = NumberQ[diff] && TrueQ[diff < tol];
-  safe = If[MatchQ[diff, _Real | _Integer | _Rational], diff, -1.];
-  Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "difference" -> safe|>, "JSON"], "\\n" -> ""]];
+        const code = `Module[{integral = ${integral}, claimed = ${result}, ass = ${assumptions}, tol = ${wlReal(tolerance)}, diff, numericDiff},
+  diff = TimeConstrained[Quiet@Check[FullSimplify[integral - claimed, ass], $Failed], 30, $Failed];
+  If[diff === 0,
+    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True|>, "JSON"], "\\n" -> ""]],
+    numericDiff = Quiet@Check[N[Abs[integral - claimed]], Indeterminate];
+    Which[
+      NumberQ[numericDiff] && TrueQ[numericDiff < tol],
+        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "numerically_consistent", "ok" -> True, "difference" -> numericDiff|>, "JSON"], "\\n" -> ""]],
+      NumberQ[numericDiff],
+        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "falsified", "ok" -> False, "difference" -> numericDiff|>, "JSON"], "\\n" -> ""]],
+      True,
+        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]]
+    ]
+  ];
 ];`
-        const payload = await evaluateMarked(context, code, VERIFY_MARKER)
-        const difference = Number(payload.difference)
-        const ok = payload.ok === true
-        return {
-          ok,
-          summary: ok
-            ? `OK: the closed form matches the integral (difference ${difference}).`
-            : `FAILED: the closed form differs from the integral (difference ${difference < 0 ? 'could not be evaluated' : difference}).`,
-        }
+        const payload = await evaluateMarkedIsolated(context, code, VERIFY_MARKER)
+        return verdict(payload, {
+          symbolic: `the claimed value matches the integral symbolically (difference 0${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}).`,
+          numeric: (value) => `the difference is ${value.difference} (symbolic simplification did not settle it).`,
+          bad: (value) => `the closed form differs from the integral (difference ${value.difference}).`,
+          inconclusive: 'Mathematica could not reduce the difference to zero or evaluate it numerically; add `assumptions` for a symbolic check.',
+          note: '',
+        })
+      }
+      if (action === 'antiderivative') {
+        const integrand = String(args?.integrand ?? '').trim()
+        const result = String(args?.result ?? '').trim()
+        if (integrand === '' || result === '') throw new Error('wolfram_verify antiderivative needs `integrand` and `result`.')
+        const lo = range ? range[0] : -5
+        const hi = range ? range[1] : 5
+        const code = `Module[{integrand = ${integrand}, candidate = ${result}, ass = ${assumptions}, var = Symbol[${wlString(sym)}], lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, diff, values, finite, maxErr},
+  diff = TimeConstrained[Quiet@Check[FullSimplify[D[candidate, var] - integrand, ass], $Failed], 30, $Failed];
+  If[diff === 0,
+    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0|>, "JSON"], "\\n" -> ""]],
+    values = Table[Quiet@Check[N[diff /. var -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
+    finite = Select[values, NumericQ[#] && NumberQ[#] &];
+    If[finite === {},
+      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]],
+      maxErr = Max[Abs[finite]];
+      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]]
+    ]
+  ];
+];`
+        const payload = await evaluateMarkedIsolated(context, code, VERIFY_MARKER)
+        return verdict(payload, {
+          symbolic: `the derivative of the candidate matches the integrand symbolically (difference 0${assumptions === 'True' ? '' : ` under assumptions ${assumptions}`}).`,
+          numeric: (value) => `derivative residual ≤ ${value.maxError} over ${value.samples} points on [${lo}, ${hi}]; a constant of integration is not checked.`,
+          bad: (value) => `derivative of the candidate differs from the integrand (residual ${value.maxError}) on [${lo}, ${hi}].`,
+          inconclusive: 'the derivative residual could not be simplified or sampled.',
+          note: '',
+        })
       }
       throw new Error(`Unknown wolfram_verify action: ${action}`)
     },

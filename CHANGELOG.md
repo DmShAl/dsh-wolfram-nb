@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.0 — 2026-11-13
+
+### Added
+
+- **`wolfram_verify action=antiderivative`.** Differentiates the claimed antiderivative and
+  compares it with the integrand; `assumptions` and `range` apply.
+- **Initial/boundary conditions for `wolfram_verify ode`.** The new `conditions` array, for
+  example `["y[0] == 1"]`, is substituted into the candidate solution and checked together with
+  the residual; the summary says how many conditions were checked.
+- **`status` in every verification result.** One of `verified_symbolic`, `numerically_consistent`,
+  `falsified`, `inconclusive`; a numerical pass is no longer presented as plain `ok`.
+
+### Changed
+
+- **`wolfram_verify` simplifies before it samples.** `integral` now compares
+  `FullSimplify[integral - result, assumptions]` first, so symbolic-parameter claims such as
+  `Integrate[Exp[-a x^2], {x, 0, Infinity}]` are proved instead of reported as failed and a
+  domain-dependent case is `inconclusive` rather than `FAILED`. `identity` uses `FullSimplify`
+  (was `Simplify`); `ode` simplifies the residual symbolically before any sampling.
+- **Verification runs in its own kernel.** Each call starts a throwaway `math.exe`, so a
+  definition left in the session (for example `y[x_] := Exp[x]`) can no longer make a wrong
+  candidate look correct.
+
 ## 1.5.0 — 2026-11-11
 
 ### Added
