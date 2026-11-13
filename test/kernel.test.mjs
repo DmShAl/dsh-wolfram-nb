@@ -533,5 +533,11 @@ test('wolfram_verify ignores session definitions that would fake a pass', async 
   assert.equal(result.status, 'falsified')
 })
 
+test('wolfram_alpha is registered', (t) => {
+  const { tools, cleanups } = makeHarness()
+  t.after(() => { for (const cleanup of cleanups) cleanup() })
+  assert.ok(tools.has('wolfram_alpha'))
+})
+
 
 

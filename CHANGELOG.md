@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.1 — 2026-11-13
+
+### Added
+
+- **`wolfram_alpha` tool.** Asks Wolfram|Alpha a natural-language query (for example
+  `solve 2 x + 3 == 7`) and returns its answer. With `steps` (default `true`) it finds the
+  query's `__Step-by-step solution` pod state, requests `__Show all steps`, and falls back to
+  the plain answer when Wolfram|Alpha offers no steps. Internet is enabled only for the query
+  via `Block[{$AllowInternet = True}, …]`; no global setting is changed.
+
 ## 1.6.0 — 2026-11-13
 
 ### Added

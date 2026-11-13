@@ -1004,6 +1004,7 @@ export function apply(ctx, config = {}) {
   const VERIFY_MARKER = '@@WB_VERIFY@@'
   const STATE_MARKER = '@@WB_STATE@@'
   const RENDER_MARKER = '@@WB_RENDER@@'
+  const ALPHA_MARKER = '@@WB_ALPHA@@'
 
   /** A simple Wolfram symbol name from an optional user value. */
   const symbolName = (value, fallback) => {
@@ -1254,6 +1255,93 @@ export function apply(ctx, config = {}) {
         })
       }
       throw new Error(`Unknown wolfram_verify action: ${action}`)
+    },
+  }
+
+  const wolframAlpha = {
+    name: 'wolfram_alpha',
+    description: [
+      'Ask Wolfram|Alpha a natural-language query and return its answer.',
+      'With steps=true (default) it requests the step-by-step solution when Wolfram|Alpha offers one, and falls back to the plain answer otherwise.',
+      'Requires internet access; the answer and the availability of steps depend on the query.',
+      'Use it for worked solutions and quick facts; use wolfram_eval for precise Wolfram Language control.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Natural-language query, e.g. "solve 2 x + 3 = 7" or "integrate x^2".',
+        },
+        steps: {
+          type: 'boolean',
+          description: 'Request the step-by-step solution when Wolfram|Alpha offers it (default true).',
+        },
+      },
+      required: ['query'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          status: { type: 'string' },
+          steps: { type: 'boolean' },
+          summary: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const query = String(args?.query ?? '').trim()
+      if (query === '') throw new Error('wolfram_alpha needs `query`.')
+      const steps = args?.steps !== false
+      const context = await kernelContext(exec)
+      // $AllowInternet is off by default in a fresh kernel; Block enables it only for
+      // this query. The step state is discovered first because Wolfram|Alpha exposes
+      // "Show all steps" as a pod state of the same pod.
+      const code = `Module[{q = ${wlString(query)}, available, states, pod, all, result, rendered, hasSteps = False},
+  result = Block[{$AllowInternet = True},
+    If[${steps ? 'True' : 'False'},
+      available = Quiet@Check[WolframAlpha[q, "PodStates"], $Failed];
+      states = Cases[available, s_String /; StringEndsQ[s, "__Step-by-step solution"], Infinity];
+      If[ListQ[states] && states =!= {},
+        hasSteps = True;
+        pod = StringDrop[First[states], -StringLength["__Step-by-step solution"]];
+        all = pod <> "__Show all steps";
+        Quiet@Check[WolframAlpha[q, "PodPlaintext", PodStates -> {First[states], all}], $Failed],
+        Quiet@Check[WolframAlpha[q, "PodPlaintext"], $Failed]],
+      Quiet@Check[WolframAlpha[q, "PodPlaintext"], $Failed]]];
+  rendered = If[ListQ[result], StringRiffle[Flatten[Map[If[StringQ[#], #, ToString[#, InputForm]] &, result]], "\\n\\n"], ToString[result, InputForm]];
+  If[result === $Failed || rendered === "$Failed",
+    Print["${ALPHA_MARKER}" <> StringReplace[ExportString[<|"status" -> "error", "steps" -> hasSteps, "message" -> "Wolfram|Alpha could not answer. Check internet access and the query."|>, "JSON"], "\\n" -> ""]],
+    Print["${ALPHA_MARKER}" <> StringReplace[ExportString[<|"status" -> "ok", "steps" -> hasSteps, "codes" -> ToCharacterCode[rendered]|>, "JSON"], "\\n" -> ""]]
+  ]
+]`
+      const payload = await evaluateMarked(context, code, ALPHA_MARKER)
+      if (payload.status !== 'ok') {
+        return {
+          ok: false,
+          status: 'error',
+          steps: false,
+          summary: `Wolfram|Alpha: ${payload.message ?? 'no answer'}`,
+        }
+      }
+      const stepsOffered = payload.steps === true
+      const note = steps && !stepsOffered ? ' (step-by-step was requested but not offered; plain answer shown)' : ''
+      // The kernel sends character codes: JSON cannot carry Wolfram's \[...] escapes.
+      const codes = Array.isArray(payload.codes) ? payload.codes : []
+      let text = ''
+      for (let i = 0; i < codes.length; i += 2048) {
+        text += String.fromCodePoint.apply(null, codes.slice(i, i + 2048))
+      }
+      text = truncate(text, 12_000)
+      return {
+        ok: true,
+        status: 'ok',
+        steps: stepsOffered,
+        summary: `Wolfram|Alpha${note}:\n${text}`,
+      }
     },
   }
 
@@ -1524,6 +1612,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(wolframNotebook), 'wolfram notebook: wolfram_notebook tool')
   ctx.effect(() => ctx.tools.register(wolframJob), 'wolfram notebook: wolfram_job tool')
   ctx.effect(() => ctx.tools.register(wolframVerify), 'wolfram notebook: wolfram_verify tool')
+  ctx.effect(() => ctx.tools.register(wolframAlpha), 'wolfram notebook: wolfram_alpha tool')
   ctx.effect(() => ctx.tools.register(wolframState), 'wolfram notebook: wolfram_state tool')
   ctx.effect(() => ctx.tools.register(wolframRender), 'wolfram notebook: wolfram_render tool')
   ctx.effect(() => ctx.tools.register(wolframBatch), 'wolfram notebook: wolfram_batch tool')
