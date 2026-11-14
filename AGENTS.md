@@ -1,17 +1,18 @@
 # AGENTS.md — окружение этой машины
 
 Инструкция для будущих сессий в этом рабочем каталоге (`D:\Projects\Hardness\dsh-wolfram-nb`).
-Проверено 12.11.2026 на Windows, DSH 0.2.2-rc.2, Mathematica 15.0.
+Проверено 15.11.2026 на Windows, DSH 0.2.2-rc.2, Mathematica 15.0.
 
 ## DSH
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.6.1** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.6.9** (bridge 1.3.3) установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin --profile desktop add file:<tgz>`. Подробности в `INSTALL.md`.
-- Тесты: `npm test` (node --test, живое ядро, 24 теста, ~70 с); `npm.cmd` доступен
+- Тесты: `npm test` (node --test, живое ядро, 37 тестов, ~80 с); приёмка установленной
+  сборки — `node scripts/smoke.mjs` (11 шагов, ~10 с). `npm.cmd` доступен
   (`C:\Program Files\nodejs`), Node v24.21.0.
 
 ## Mathematica
