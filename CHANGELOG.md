@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.8 — 2026-11-14
+
+### Added
+
+- **Start watchdog.** The kernel prints `@@WB_BEGIN@@` before it evaluates anything, so a missing
+  marker means it never read the request: stuck inside a library call, or its bridge was wiped by
+  `ClearAll["*"]`. That case used to burn the whole evaluation timeout; it now fails after 5–20 s,
+  restarts the kernel and says why.
+- **`scripts/smoke.mjs`.** Boots the plugin the way a session does and walks every tool once
+  (11 steps, ~10 s); use it to accept an installed build.
+
+### Tests
+
+- `Exit[0]` in a cell is reported as a kernel exit and the next call recovers on a fresh kernel
+  (37 cases total).
+
+### Documentation
+
+- Both READMEs no longer claim that every evaluation writes a `.nb`; the export is opt-in since
+  1.6.3.
+- Development notes cover `npm test`, the smoke script, the `package.json` guard and
+  `DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH`.
+
 ## 1.6.7 — 2026-11-14
 
 ### Added

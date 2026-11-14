@@ -64,7 +64,7 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
 | Persistent kernel | One long-lived `math.exe` per session; variables and definitions survive across calls |
-| `.nb` export | Every evaluation writes a real Mathematica notebook file into `wolfram-notebooks/` |
+| `.nb` export (opt-in) | Pass `exportNotebook: true` to also write the evaluation as a real Mathematica notebook file under `wolfram-notebooks/`; by default the panel renders the document and nothing is written to disk |
 
 ## Architecture
 
@@ -99,8 +99,9 @@ cells=[
 ]
 ```
 
-The panel opens automatically with the formulas and graphics, and a
-`wolfram-notebooks/<title>-<time>.nb` file is written for further editing in Mathematica.
+The panel opens automatically with the formulas and graphics. Nothing is written to disk by default;
+to keep a `.nb` for further editing in Mathematica, add `"exportNotebook": true` to the request and
+`wolfram-notebooks/<title>-<time>.nb` is written.
 
 Render an existing notebook:
 
@@ -191,7 +192,7 @@ makes troubleshooting straightforward.
 
 - `.dsh-wolfram/latest.json` — the document the panel renders (workspace, per session)
 - `.dsh-wolfram/tmp/` — kernel request/response scratch files
-- `wolfram-notebooks/*.nb` — exported Mathematica notebooks
+- `wolfram-notebooks/*.nb` — exported Mathematica notebooks (written only with `exportNotebook: true`)
 
 ## Known limitations
 
@@ -225,6 +226,19 @@ Request JSON is written as pure ASCII (non-ASCII characters escaped as `\uXXXX`)
 base64-encoded JSON, which avoids Windows console encoding differences. After editing `bridge.wl`,
 run `wolfram_notebook(..., action="reset")` once or restart the kernel; after editing `client.js`,
 reload the plugin (in this repository that is done by toggling its enabled state).
+
+Tests and checks:
+
+- `npm test` — 37 cases against the real kernel, about 80 s.
+- `node scripts/smoke.mjs` — boots the plugin and calls every tool once (~10 s); use it to accept a
+  build after installing. `--with-alpha` adds the Wolfram|Alpha call (needs a network).
+- `build-tgz.bat` validates that `package.json` is clean UTF-8 JSON before packing: PowerShell's
+  `Set-Content -Encoding utf8` adds a BOM, and `dsh plugin add` rejects such a tarball.
+- While developing, `DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH=1` keeps a kernel whose `bridge.wl` version
+  differs from the host's expectation (`wolfram_notebook action="status"` reports the mismatch).
+- A kernel that does not answer `@@WB_BEGIN@@` within 5–20 s is treated as stuck and restarted; this
+  covers `ClearAll["*"]` wiping the `WolframBridge`` definitions as well as a kernel stuck inside a
+  library call, instead of waiting out the whole evaluation timeout.
 
 ## License and trademarks
 

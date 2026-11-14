@@ -61,7 +61,7 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |
 | 持久内核 | 每个会话一个常驻 `math.exe`，变量与函数定义跨调用保留 |
-| `.nb` 导出 | 每次计算自动生成真正的 Mathematica 笔记本文件（`wolfram-notebooks/`） |
+| `.nb` 导出（可选） | 传 `exportNotebook: true` 才把本次计算写成真正的 Mathematica 笔记本文件（`wolfram-notebooks/`）；默认只在面板渲染，不落盘 |
 
 ## 架构
 
@@ -71,7 +71,7 @@ Host 插件 (index.js)
   ├─ bridge.wl：文件式 JSON 协议（请求/响应各一个文件，stdout 只走标记行）
   ├─ 把结果写成 .dsh-wolfram/latest.json（含 publishedAt、MathML、base64 PNG）
   ├─ wolfram_job：每个任务一个独立 math.exe（超时不打断会话内核）
-  └─ 注册 wolfram_eval / wolfram_notebook / wolfram_job 三个工具
+  └─ 注册 8 个工具：eval / render / state / verify / batch / job / notebook / alpha
 Client 插件 (client.js)
   ├─ 注册右侧栏 Tab 类型 wolfram-notebook（同时注册引导页入口）
   ├─ 面板轮询 latest.json，按 publishedAt 增量刷新
@@ -93,8 +93,9 @@ cells=[
 ]
 ```
 
-面板会自动打开并显示公式与图形；同时生成
-`wolfram-notebooks/<标题>-<时间>.nb`，可以直接用 Mathematica 打开继续编辑。
+面板会自动打开并显示公式与图形。默认不写文件；需要 `.nb` 继续在 Mathematica 里编辑时，
+在请求里加上 `"exportNotebook": true`，文件会出现在
+`wolfram-notebooks/<标题>-<时间>.nb`。
 
 渲染已有笔记本：
 
@@ -184,7 +185,7 @@ config:
 
 - `.dsh-wolfram/latest.json`：面板渲染的文档（会话内、工作区内）
 - `.dsh-wolfram/tmp/`：内核请求/响应的临时文件
-- `wolfram-notebooks/*.nb`：导出的 Mathematica 笔记本
+- `wolfram-notebooks/*.nb`：导出的 Mathematica 笔记本（只在 `exportNotebook: true` 时写入）
 
 ## 已知限制
 
@@ -221,6 +222,18 @@ stdout: @@WB_READY@@<version>
 请求 JSON 使用纯 ASCII（非 ASCII 字符以 `\uXXXX` 转义写入），响应为 base64 编码的 JSON，
 避免 Windows 控制台编码差异。修改 `bridge.wl` 后执行一次 `wolfram_notebook(..., action="reset")`
 或重启内核即可生效；修改 `client.js` 后需要重新加载插件（本仓库通过 `plugin_manager` 切换启用状态完成）。
+
+测试与检查：
+
+- `npm test` — 37 个用例，使用真实内核，约 80 秒。
+- `node scripts/smoke.mjs` — 启动插件并逐个调用全部工具（约 10 秒），用于安装后验收；
+  `--with-alpha` 追加 Wolfram|Alpha（需要联网）。
+- `build-tgz.bat` 在打包前校验 `package.json` 是否为干净的 UTF-8 JSON：PowerShell 的
+  `Set-Content -Encoding utf8` 会写入 BOM，而带 BOM 的包会被 `dsh plugin add` 拒绝。
+- 开发期间若 `index.js` 与 `bridge.wl` 版本不同步，可设 `DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH=1`
+  让内核继续启动（`wolfram_notebook action="status"` 会显示版本不匹配）。
+- 内核在 5–20 秒内没有回 `@@WB_BEGIN@@` 时会被判定为卡死并重启：这覆盖了 `ClearAll["*"]`
+  清掉 `WolframBridge`` 定义、内核卡在库函数里的情况，避免等满整个超时。
 
 ## 许可证与商标
 

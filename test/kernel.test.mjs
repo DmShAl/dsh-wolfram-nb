@@ -539,6 +539,23 @@ test('wolfram_alpha is registered', (t) => {
   assert.ok(tools.has('wolfram_alpha'))
 })
 
+test('a cell that exits the kernel is reported and the next call recovers', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  await assert.rejects(
+    () => tools.get('wolfram_eval').execute({ code: 'Exit[0]', exportNotebook: false }, {}),
+    (error) => {
+      assert.match(error.message, /kernel exited/i)
+      return true
+    },
+  )
+
+  const after = await tools.get('wolfram_eval').execute({ code: '2 + 2', exportNotebook: false }, {})
+  assert.equal(after.ok, true)
+  assert.match(after.summary, /4/)
+})
+
 test('a large result falls back to plain text instead of blocking on typesetting', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
   teardown(t, cleanups)

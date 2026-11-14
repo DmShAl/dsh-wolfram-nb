@@ -325,7 +325,10 @@ class WolframKernel {
       const id = line.slice('@@WB_BEGIN@@'.length).trim()
       this.activeId = id
       const waiter = this.waiters.get(id)
-      if (waiter !== undefined) waiter.console = []
+      if (waiter !== undefined) {
+        clearTimeout(waiter.startTimer)
+        waiter.console = []
+      }
       return
     }
     if (line.startsWith('@@WB_DOC@@')) {
@@ -337,6 +340,7 @@ class WolframKernel {
       if (waiter === undefined) return
       this.waiters.delete(id)
       clearTimeout(waiter.timer)
+      clearTimeout(waiter.startTimer)
       if (this.activeId === id) this.activeId = null
       try {
         let jsonText
@@ -404,8 +408,24 @@ class WolframKernel {
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
       ? options.timeoutMs
       : this.timeoutMs
+    // The kernel prints @@WB_BEGIN@@ before it evaluates anything, so the marker
+    // must arrive almost immediately. If it does not, the kernel never read the
+    // request — it is stuck, or its bridge was wiped (ClearAll["*"] drops the
+    // WolframBridge` definitions). Waiting the full evaluation timeout for that
+    // case used to cost minutes; fail fast and let the next call restart.
+    const startTimeoutMs = Math.max(5_000, Math.min(timeoutMs, 20_000))
     return new Promise((resolvePromise, rejectPromise) => {
+      const startTimer = setTimeout(() => {
+        clearTimeout(timer)
+        this.waiters.delete(id)
+        rejectPromise(new Error(
+          `The kernel did not start the evaluation within ${Math.round(startTimeoutMs / 1000)} s. ` +
+          'It is stuck, or its bridge was cleared (ClearAll["*"] removes the WolframBridge` definitions). ' +
+          'The kernel was restarted; earlier definitions are gone.'))
+        this.dispose()
+      }, startTimeoutMs)
       const timer = setTimeout(() => {
+        clearTimeout(startTimer)
         const waiter = this.waiters.get(id)
         const consoleTail = (waiter?.console ?? []).slice(-8).join('\n').trim()
         this.waiters.delete(id)
@@ -421,6 +441,7 @@ class WolframKernel {
         requestPath,
         responsePath,
         timer,
+        startTimer,
         resolve: resolvePromise,
         reject: rejectPromise,
       })
@@ -428,6 +449,7 @@ class WolframKernel {
         this.proc.stdin.write(`WolframBridge\`EvalFile["${requestPath.replace(/\\/g, '/')}"];\n`)
       } catch (error) {
         clearTimeout(timer)
+        clearTimeout(startTimer)
         this.waiters.delete(id)
         rejectPromise(error)
       }
