@@ -420,7 +420,7 @@ class WolframKernel {
         this.waiters.delete(id)
         rejectPromise(new Error(
           `The kernel did not start the evaluation within ${Math.round(startTimeoutMs / 1000)} s. ` +
-          'It is stuck, or its bridge was cleared (ClearAll["*"] removes the WolframBridge` definitions). ' +
+          'It is stuck outside the evaluator, or the process no longer reads its input. ' +
           'The kernel was restarted; earlier definitions are gone.'))
         this.dispose()
       }, startTimeoutMs)

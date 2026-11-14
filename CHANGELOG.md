@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.9 — 2026-11-14
+
+### Corrected
+
+- **`ClearAll["*"]` does not clear the bridge.** The 1.6.6 note claimed it did; a live check after
+  the 1.6.8 release showed `WolframBridge`` keeps its definitions, because the context is not on
+  `$ContextPath` and `ClearAll["*"]` only matches symbols there. The README limitation and the
+  watchdog message were corrected; the watchdog stays, as a kernel that never reads its input is
+  still possible (a hung process, a blocked stdin).
+
 ## 1.6.8 — 2026-11-14
 
 ### Added
