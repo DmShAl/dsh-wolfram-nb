@@ -199,6 +199,9 @@ makes troubleshooting straightforward.
 - Interactive front-end constructs (`Manipulate`, `Dynamic`, the notebook UI itself) cannot be interactive on the web page; they render as static formulas or plain text.
 - A few expressions (for example `Quantity`) have no MathML export; the panel falls back to `InputForm` text while the kernel still returns valid TeX.
 - Graphics need the front end to rasterize; the first plot takes 1–3 seconds.
+- `ClearAll["*"]` also removes the `WolframBridge`` definitions, so the kernel stops answering; the
+  host then treats it as stuck, restarts it within 5–20 s and says why. The definitions were meant
+  to be cleared anyway, but the session no longer stalls for the whole timeout.
 - Sessions sharing one workspace share `latest.json` (kernels stay per-session).
 - After a page load, the first auto-reveal of the right sidebar needs one user gesture (or click “+” → Wolfram notebook); every later evaluation reveals and focuses the panel automatically.
 - **Notebooks exported by early versions cannot be recovered**: the first implementation used `MakeBoxes` inside a `Module`, so output cells were written as `value$…` placeholders (`$` is part of the variable name, so the original value cannot be reconstructed). Recompute to generate a new notebook; the current version uses `ToBoxes` and is correct.
