@@ -1,6 +1,6 @@
 # AGENTS.md — окружение этой машины
 
-Инструкция для будущих сессий в этом рабочем каталоге (`D:\Projects\Hardness\dsh-wolfram-nb`).
+Инструкция для будущих сессий в этом рабочем каталоге (`D:\Projects\LLM\Hardness\dsh-wolfram-nb`).
 Проверено 15.11.2026 на Windows, DSH 0.2.2-rc.2, Mathematica 15.0.
 
 ## DSH
@@ -76,6 +76,6 @@
 - `examples/` — готовые задачи как образцы (`bathtub-vortex`, `ode-second-order`,
   `lorenz-example`): `TASK.md`, отчёт MD/TeX, сборка DOCX/PDF, `_plots/`.
 - В npm-пакет (`files` в `package.json`) ни `workspace/`, ни `examples/` не входят.
-- `D:\Projects\Hardness\dsh-wolfram-nb_Priv\notes\` — приватные заметки (LEDGER, журналы
+- `D:\Projects\LLM\Hardness\dsh-wolfram-nb_Priv\notes\` — приватные заметки (LEDGER, журналы
   сессий). Живут рядом с репозиторием и внутрь не переносятся: публичный checkout не должен
   получить их случайно.

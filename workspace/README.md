@@ -5,7 +5,7 @@
 плагина:
 
 ```
-robocopy D:\Projects\Hardness\dsh-wolfram-nb\workspace D:\Projects\MyTask /E
+robocopy D:\Projects\LLM\Hardness\dsh-wolfram-nb\workspace D:\Projects\MyTask /E
 ```
 
 `AGENTS.md` в этом каталоге читается сессией автоматически, `tools\` — скрипты сборки
