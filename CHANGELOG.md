@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.3 — 2026-11-14
+
+### Fixed
+
+- **`ClearAll["Global`*"]` no longer breaks the call.** The bridge frame that runs a cell kept
+  its `Module` state in the `Global`` context, so a cell that cleared `Global`` also cleared the
+  start time and the cell type of the frame still on the stack; the cell record then failed to
+  match its pattern, the document was left with an unevaluated `Join`, and the whole response
+  failed with "The result could not be serialized as JSON". The state that must outlive the
+  evaluation is now passed as arguments to `WolframBridge`evalHeldCell` / `finishRun`, whose
+  pattern variables live in `WolframBridge``.
+- **A malformed document can no longer lose the result.** `publish` coerces non-JSON leaves to
+  their `InputForm` text, marks the document `coerced: true` and still answers; `wolfram_eval`
+  reports that the payload was repaired.
+- **`evaluateMarked` retries once.** `wolfram_render`, `wolfram_state` and `wolfram_verify` share
+  a marked-evaluation path that could return an empty console and "no structured result" when a
+  response was lost; one immediate retry now covers that, and the error names the retry.
+
+### Changed
+
+- **`exportNotebook` defaults to `false`.** The panel document is still published on every call,
+  but a `.nb` file is written only when `exportNotebook: true` is passed — no more one file per
+  evaluation in `wolfram-notebooks/`.
+
 ## 1.6.2 — 2026-11-13
 
 ### Changed

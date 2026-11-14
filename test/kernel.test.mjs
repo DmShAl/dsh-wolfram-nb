@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, unlinkSync } from 'node:fs'
+import { readFileSync, unlinkSync, existsSync } from 'node:fs'
 import { apply } from '../index.js'
 
 /**
@@ -76,7 +76,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /Bridge: 1\.3\.0/)
+  assert.match(status.summary, /Bridge: 1\.3\.1/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -537,6 +537,42 @@ test('wolfram_alpha is registered', (t) => {
   const { tools, cleanups } = makeHarness()
   t.after(() => { for (const cleanup of cleanups) cleanup() })
   assert.ok(tools.has('wolfram_alpha'))
+})
+
+test('a cell that clears the Global context still returns its result', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // ClearAll["Global`*"] used to wipe the Module variables of the bridge frame
+  // that was still running, so the document became unexportable and the whole
+  // call failed with "could not be serialized as JSON".
+  const result = await tools.get('wolfram_eval').execute(
+    { code: 'ClearAll["Global`*"]; 6*7', exportNotebook: false },
+    {},
+  )
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /42/)
+
+  const after = await tools.get('wolfram_eval').execute(
+    { code: 'kept = 5; kept + 1', exportNotebook: false },
+    {},
+  )
+  assert.equal(after.ok, true)
+  assert.match(after.summary, /6/)
+})
+
+test('a .nb file is written only when exportNotebook is true', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const plain = await tools.get('wolfram_eval').execute({ code: '2 + 2' }, {})
+  assert.equal(plain.ok, true)
+  assert.equal(plain.notebookPath, '')
+
+  const saved = await tools.get('wolfram_eval').execute({ code: '2 + 2', exportNotebook: true }, {})
+  assert.notEqual(saved.notebookPath, '')
+  assert.equal(existsSync(saved.notebookPath), true)
+  unlinkSync(saved.notebookPath)
 })
 
 
