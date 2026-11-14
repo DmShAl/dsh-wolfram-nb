@@ -7,9 +7,17 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.3.0";
+WolframBridge`$version = "1.3.3";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
+(* MathML/TeX conversion goes through LibraryLink, does not respond to Abort, and
+   degrades badly with size: a few thousand elements already take minutes (MathML
+   hits $RecursionLimit), so a long list used to block the whole kernel. Above
+   these budgets the value is shown as plain text instead of being typeset. *)
+WolframBridge`$maxTypesetLeaves = 500;
+WolframBridge`$maxTypesetBytes = 200000;
+WolframBridge`$maxTypesetDepth = 64;
+WolframBridge`$maxInputFormBytes = 4000000;
 WolframBridge`$cellTimeout = 300;
 WolframBridge`$imageTimeout = 30;
 
@@ -44,13 +52,22 @@ WolframBridge`exportImage[value_] := Module[{png},
 ];
 
 WolframBridge`expressionRecord[index_Integer, value_, timing_Integer] := Module[
-  {inputForm, mathml, tex},
-  inputForm = WolframBridge`safeString[
-    Quiet@Check[ToString[value, InputForm], "$Failed"], "$Failed"];
-  mathml = Quiet@Check[
-    TimeConstrained[ExportString[value, "MathML"], 10, ""], ""];
-  tex = Quiet@Check[
-    TimeConstrained[ToString[TeXForm[value]], 10, ""], ""];
+  {inputForm, mathml = "", tex = "", size, typeset},
+  size = Quiet@Check[ByteCount[value], Infinity];
+  typeset = NumberQ[size] && size <= WolframBridge`$maxTypesetBytes &&
+    Quiet@Check[LeafCount[value], Infinity] <= WolframBridge`$maxTypesetLeaves &&
+    Quiet@Check[Depth[value], Infinity] <= WolframBridge`$maxTypesetDepth;
+  inputForm = If[! NumberQ[size] || size > WolframBridge`$maxInputFormBytes,
+    "<" <> ToString[Head[value]] <> " with " <> ToString[Quiet@Check[LeafCount[value], 0]] <>
+      " subexpressions, " <> ToString[Round[size/1024]] <> " KB: too large to print in full>",
+    WolframBridge`safeString[
+      Quiet@Check[TimeConstrained[ToString[value, InputForm], 30, "$Failed"], "$Failed"], "$Failed"]];
+  If[typeset,
+    mathml = Quiet@Check[
+      TimeConstrained[ExportString[value, "MathML"], 10, ""], ""];
+    tex = Quiet@Check[
+      TimeConstrained[ToString[TeXForm[value]], 10, ""], ""];
+  ];
   <|"index" -> index, "kind" -> "expression", "timingMs" -> timing,
     "inputForm" -> WolframBridge`limit[inputForm, WolframBridge`$maxInputForm],
     "mathml" -> If[StringQ[mathml], mathml, ""],
@@ -104,8 +121,14 @@ WolframBridge`holdCell[code_String] := Module[{held},
   ]
 ];
 
+(* A user cell may run ClearAll["Global`*"], which also clears the Global`-context
+   symbols that Module creates for the frame still running the cell. Anything the
+   bridge needs after the cell has run is therefore passed as an argument: pattern
+   variables of a WolframBridge` definition live in WolframBridge`, and the cell
+   cannot reach them. Values assigned only afterwards (value, timing, items) are
+   recomputed after the clear, so they survive too. *)
 WolframBridge`evalCell[cell_, {index_Integer}] := Module[
-  {code, held, value, started, timing, type},
+  {code, held, started, type},
   type = Lookup[cell, "type", "input"];
   code = Lookup[cell, "code", ""];
   If[! MemberQ[{"input", "code"}, type],
@@ -121,15 +144,20 @@ WolframBridge`evalCell[cell_, {index_Integer}] := Module[
       "text" -> Lookup[cell, "text", ""],
       "record" -> <|"index" -> index, "kind" -> "parseError", "timingMs" -> 0|>|>]
   ];
+  WolframBridge`evalHeldCell[cell, index, type, code, started, held]
+];
+
+WolframBridge`evalHeldCell[cell_, index_Integer, type_, code_, started_, held_] :=
+  Module[{value, timing},
   value = TimeConstrained[ReleaseHold[held], WolframBridge`$cellTimeout,
     WolframBridge`$timedOut];
   timing = Round[(AbsoluteTime[] - started)*1000];
   If[value === WolframBridge`$timedOut,
-    Return[<|"type" -> Lookup[cell, "type", "input"], "source" -> code,
+    Return[<|"type" -> type, "source" -> code,
       "text" -> Lookup[cell, "text", ""],
       "record" -> <|"index" -> index, "kind" -> "timedOut", "timingMs" -> timing|>|>]
   ];
-  <|"type" -> Lookup[cell, "type", "input"], "source" -> code,
+  <|"type" -> type, "source" -> code,
     "text" -> Lookup[cell, "text", ""], "expr" -> value,
     "record" -> WolframBridge`cellRecord[index, value, timing]|>
 ];
@@ -192,10 +220,38 @@ WolframBridge`normalize[value_Association] :=
 
 WolframBridge`normalize[value_] := value;
 
+(* Last-resort JSON coercion: any leaf that is not a string, number, boolean,
+   Null or a list/association becomes its InputForm text, so one stray symbol in
+   a document can no longer fail the whole response. *)
+WolframBridge`jsonSafe[(rule : Rule | RuleDelayed)[key_, value_]] :=
+  key -> WolframBridge`jsonSafe[value];
+
+WolframBridge`jsonSafe[value_Association] :=
+  Association[Map[WolframBridge`jsonSafe, Normal[value]]];
+
+WolframBridge`jsonSafe[value_List] := Map[WolframBridge`jsonSafe, value];
+
+WolframBridge`jsonSafe[value_] := Which[
+  StringQ[value], value,
+  IntegerQ[value] || NumberQ[value], value,
+  MemberQ[{True, False, Null}, value], value,
+  AssociationQ[value], Association[Map[WolframBridge`jsonSafe, Normal[value]]],
+  ListQ[value], Map[WolframBridge`jsonSafe, value],
+  True, WolframBridge`limit[ToString[value, InputForm], 4000]
+];
+
 WolframBridge`publish[request_, document_] := Module[
   {payload, responsePath, id, json},
   id = Lookup[request, "id", "0"];
   json = Quiet@Check[WolframBridge`toJson[document], $Failed];
+  If[! StringQ[json],
+    (* One malformed cell must not hide the whole result: coerce every leaf and
+       mark the document so the caller can tell the payload was repaired. *)
+    json = Quiet@Check[
+      WolframBridge`toJson[Join[
+        WolframBridge`jsonSafe[document],
+        <|"coerced" -> True|>]], $Failed];
+  ];
   If[! StringQ[json],
     json = WolframBridge`toJson[<|
       "id" -> id,
@@ -291,11 +347,20 @@ WolframBridge`openNotebookDocument[path_String] := Module[{notebook, cells},
     "timingMs" -> 0|>
 ];
 
+(* `id` must not be kept in a Module variable: the cells may run
+   ClearAll["Global`*"], and the symbol would be gone when the document is built.
+   `items` is assigned after the cells have run, so it is safe; everything below
+   runs in a frame whose pattern variables live in WolframBridge`. *)
 WolframBridge`run[request_] := Module[
-  {id, items, document, notebookInfo},
-  id = Lookup[request, "id", "0"];
-  WriteString["stdout", "@@WB_BEGIN@@", id, "\n"];
+  {items},
+  WriteString["stdout", "@@WB_BEGIN@@", Lookup[request, "id", "0"], "\n"];
   items = MapIndexed[WolframBridge`evalCell, Lookup[request, "cells", {}]];
+  WolframBridge`finishRun[request, items]
+];
+
+WolframBridge`finishRun[request_, items_] := Module[
+  {id, document, notebookInfo},
+  id = Lookup[request, "id", "0"];
   document = <|
     "id" -> id,
     "kernelVersion" -> $Version,

@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.6.6 — 2026-11-14
+
+### Fixed
+
+- **A replaced kernel's exit no longer fails the next call.** `dispose()` kills the old process
+  ~400 ms later, and its `exit` event rejected every waiter — including the call that had already
+  started on the fresh kernel ("Wolfram kernel exited (code 0)." right after a timeout or
+  `wolfram_notebook action=reset`). The handler now ignores a child that is no longer current.
+
+### Documentation
+
+- `wolfram_render`, `wolfram_state` and `wolfram_verify` retry a marked call once; the retried
+  calls are idempotent (they overwrite a file or read state), which is why the retry is safe.
+- `ClearAll["*"]` (every context, unlike `ClearAll["Global`*"]`) also drops the bridge symbols.
+  The session then stalls until the call times out and the kernel is recreated; definitions are
+  lost anyway, so this is documented rather than guarded.
+
+## 1.6.5 — 2026-11-14
+
+### Fixed
+
+- **Deeply nested results no longer hang on MathML.** A leaf budget is not enough: `Nest[List, 1, 400]`
+  has only 401 leaves but depth 400, passed the check and kept `ExportString[.., "MathML"]` busy for
+  minutes (depth 100 converts in 0.09 s, depth 200 already does not finish). Typesetting now also
+  requires `Depth[value] <= $maxTypesetDepth` (64).
+
+## 1.6.4 — 2026-11-14
+
+### Fixed
+
+- **A large result no longer blocks the kernel.** `ExportString[value, "MathML"]` goes through
+  LibraryLink, ignores `Abort`, and degrades sharply with size — `Range[10^5]` hung the call for
+  the whole 180 s timeout and `Range[10^3]` already hit `$RecursionLimit`. Values above
+  `$maxTypesetLeaves` (500) or `$maxTypesetBytes` (200 KB) now skip MathML/TeX and are shown as
+  `InputForm` text; the largest values are replaced by a one-line size summary.
+- **Console lines no longer carry `InputForm` quotes.** `Print["x = ", 5]` reached the console as
+  `"x = "5`; quoted fragments at the start of a line are now decoded.
+
+## 1.6.3 — 2026-11-14
+
+### Fixed
+
+- **`ClearAll["Global`*"]` no longer breaks the call.** The bridge frame that runs a cell kept
+  its `Module` state in the `Global`` context, so a cell that cleared `Global`` also cleared the
+  start time and the cell type of the frame still on the stack; the cell record then failed to
+  match its pattern, the document was left with an unevaluated `Join`, and the whole response
+  failed with "The result could not be serialized as JSON". The state that must outlive the
+  evaluation is now passed as arguments to `WolframBridge`evalHeldCell` / `finishRun`, whose
+  pattern variables live in `WolframBridge``.
+- **A malformed document can no longer lose the result.** `publish` coerces non-JSON leaves to
+  their `InputForm` text, marks the document `coerced: true` and still answers; `wolfram_eval`
+  reports that the payload was repaired.
+- **`evaluateMarked` retries once.** `wolfram_render`, `wolfram_state` and `wolfram_verify` share
+  a marked-evaluation path that could return an empty console and "no structured result" when a
+  response was lost; one immediate retry now covers that, and the error names the retry.
+
+### Changed
+
+- **`exportNotebook` defaults to `false`.** The panel document is still published on every call,
+  but a `.nb` file is written only when `exportNotebook: true` is passed — no more one file per
+  evaluation in `wolfram-notebooks/`.
+
 ## 1.6.2 — 2026-11-13
 
 ### Changed

@@ -20,7 +20,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
-const BRIDGE_VERSION = '1.3.0'
+const BRIDGE_VERSION = '1.3.3'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
 const DEFAULT_MAX_RUNNING_JOBS = 4
@@ -79,6 +79,16 @@ const INERT_PATTERN = /^(Integrate|Solve|Reduce|DSolve|NDSolve|Simplify|FullSimp
 /** Quote a Wolfram Language string literal. */
 function wlString(value) {
   return `"${String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n')}"`
+}
+
+/** The kernel writes `Print` output with string arguments in InputForm, so a line
+ *  reads `"x = "5` instead of `x = 5`. Decode the quoted fragments of such lines
+ *  (only when the line starts with a quote) so the console looks like a notebook. */
+function unquoteConsoleLine(line) {
+  if (typeof line !== 'string' || !line.startsWith('"')) return line
+  return line.replace(/"((?:[^"\\]|\\.)*)"/g, (match, body) => {
+    try { return JSON.parse(`"${body}"`) } catch { return match }
+  })
 }
 
 /** Parse the JSON payload the kernel prints after a marker (e.g. @@WB_VERIFY@@). */
@@ -246,8 +256,13 @@ class WolframKernel {
     child.stdin.on('error', () => { /* the kernel may already be gone */ })
     child.stdout.on('data', chunk => this.onData(chunk))
     child.stderr.on('data', chunk => { this.stderr = `${this.stderr}${chunk}`.slice(-4000) })
-    child.on('error', error => this.failAll(error))
-    child.on('exit', (code) => this.failAll(new Error(`Wolfram kernel exited (code ${code}). ${this.stderr.slice(-800)}`)))
+    // A replaced kernel exits ~400 ms after dispose(), by which time a new process
+    // may already be starting; its exit must not fail the new kernel's waiters.
+    child.on('error', error => { if (this.proc === child) this.failAll(error) })
+    child.on('exit', (code) => {
+      if (this.proc !== child) return
+      this.failAll(new Error(`Wolfram kernel exited (code ${code}). ${this.stderr.slice(-800)}`))
+    })
 
     this.readyPromise = new Promise((resolveReady, rejectReady) => {
       this.resolveReady = resolveReady
@@ -335,7 +350,7 @@ class WolframKernel {
     const waiter = this.activeId === null ? undefined : this.waiters.get(this.activeId)
     if (waiter !== undefined && line.trim() !== '' && !line.startsWith('@@WB_')) {
       if (!/^Connecting\.\.\./.test(line) && !/^Elapsed time\b/.test(line)) {
-        waiter.console.push(line)
+        waiter.console.push(unquoteConsoleLine(line))
         waiter.onOutput?.(line)
       }
     }
@@ -558,20 +573,33 @@ export function apply(ctx, config = {}) {
    * Run one input cell and read the JSON payload it prints after `marker`.
    * Used by wolfram_verify / wolfram_state / wolfram_render so their results do
    * not have to be reverse-engineered from the rendered notebook document.
+   *
+   * The marker can go missing when the kernel is restarted mid-request or when a
+   * response is lost, so one immediate retry is attempted before failing: the
+   * marked calls are idempotent (they report or overwrite a file).
    */
   const evaluateMarked = async (context, code, marker, prelude = '') => {
     const cells = prelude === ''
       ? [{ type: 'input', code }]
       : [{ type: 'input', code: prelude }, { type: 'input', code }]
-    const response = await evaluateRequest(context, {
-      id: `marked-${Date.now()}`,
-      cells,
-    })
-    const document = response.document
-    if (document?.error) throw new Error(String(document.error))
-    const payload = parseMarker(response.console, marker)
+    const attempt = async () => {
+      const response = await evaluateRequest(context, {
+        id: `marked-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        cells,
+      })
+      const document = response.document
+      if (document?.error) throw new Error(String(document.error))
+      return { payload: parseMarker(response.console, marker), response }
+    }
+    let { payload, response } = await attempt()
+    if (payload === null) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      const retried = await attempt()
+      payload = retried.payload
+      response = retried.response
+    }
     if (payload === null || typeof payload !== 'object') {
-      throw new Error(`The kernel produced no structured result. Console:\n${truncate(response.console, 1200)}`)
+      throw new Error(`The kernel produced no structured result after a retry. Console:\n${truncate(response.console, 1200)}`)
     }
     return payload
   }
@@ -595,7 +623,7 @@ export function apply(ctx, config = {}) {
       'Evaluate Wolfram Language (Mathematica) source in a persistent local kernel.',
       'Use it for symbolic algebra, calculus, equation solving, simplifications, matrices, special functions, units, data and any other Wolfram Language work.',
       'Send one or more cells: input cells are evaluated in order and share definitions with earlier calls in the same session; text/title/section cells are display-only.',
-      'Every call publishes a notebook document that the Wolfram panel renders beside the conversation, and writes a .nb file unless exportNotebook is false.',
+      'Every call publishes a notebook document that the Wolfram panel renders beside the conversation; a .nb file is written to the workspace only when exportNotebook is true.',
       'The tool result is a compact text summary; use the panel to read the typeset formulas.',
     ].join(' '),
     parameters: {
@@ -625,7 +653,7 @@ export function apply(ctx, config = {}) {
         title: { type: 'string', description: 'Notebook title.' },
         exportNotebook: {
           type: 'boolean',
-          description: 'Write a .nb file into the workspace (default true).',
+          description: 'Write a .nb file into the workspace (default false; the panel notebook is always published).',
         },
         reset: {
           type: 'boolean',
@@ -657,7 +685,7 @@ export function apply(ctx, config = {}) {
       if (cells.length === 0) throw new Error('wolfram_eval needs `code` or at least one input cell.')
       if (args?.reset === true) disposeKernel(context.sessionId)
       const title = typeof args?.title === 'string' ? args.title : ''
-      const exportNotebook = args?.exportNotebook !== false
+      const exportNotebook = args?.exportNotebook === true
       let nbPath
       if (exportNotebook) {
         const dir = join(context.cwd, EXPORT_DIR)
@@ -694,6 +722,9 @@ export function apply(ctx, config = {}) {
         notebookPath: nbPath ? nbPath.replace(/\//g, '\\') : undefined,
         panel: true,
       }) + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
+        + (document?.coerced === true
+          ? '\nNote: a cell returned a value that is not valid JSON, so the notebook payload was coerced to text.'
+          : '')
       return {
         ok: true,
         summary,
