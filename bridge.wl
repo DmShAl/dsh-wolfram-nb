@@ -7,7 +7,7 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.3.2";
+WolframBridge`$version = "1.3.3";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
 (* MathML/TeX conversion goes through LibraryLink, does not respond to Abort, and
@@ -16,6 +16,7 @@ WolframBridge`$maxInputForm = 40000;
    these budgets the value is shown as plain text instead of being typeset. *)
 WolframBridge`$maxTypesetLeaves = 500;
 WolframBridge`$maxTypesetBytes = 200000;
+WolframBridge`$maxTypesetDepth = 64;
 WolframBridge`$maxInputFormBytes = 4000000;
 WolframBridge`$cellTimeout = 300;
 WolframBridge`$imageTimeout = 30;
@@ -54,7 +55,8 @@ WolframBridge`expressionRecord[index_Integer, value_, timing_Integer] := Module[
   {inputForm, mathml = "", tex = "", size, typeset},
   size = Quiet@Check[ByteCount[value], Infinity];
   typeset = NumberQ[size] && size <= WolframBridge`$maxTypesetBytes &&
-    Quiet@Check[LeafCount[value], Infinity] <= WolframBridge`$maxTypesetLeaves;
+    Quiet@Check[LeafCount[value], Infinity] <= WolframBridge`$maxTypesetLeaves &&
+    Quiet@Check[Depth[value], Infinity] <= WolframBridge`$maxTypesetDepth;
   inputForm = If[! NumberQ[size] || size > WolframBridge`$maxInputFormBytes,
     "<" <> ToString[Head[value]] <> " with " <> ToString[Quiet@Check[LeafCount[value], 0]] <>
       " subexpressions, " <> ToString[Round[size/1024]] <> " KB: too large to print in full>",

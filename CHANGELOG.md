@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.5 — 2026-11-14
+
+### Fixed
+
+- **Deeply nested results no longer hang on MathML.** A leaf budget is not enough: `Nest[List, 1, 400]`
+  has only 401 leaves but depth 400, passed the check and kept `ExportString[.., "MathML"]` busy for
+  minutes (depth 100 converts in 0.09 s, depth 200 already does not finish). Typesetting now also
+  requires `Depth[value] <= $maxTypesetDepth` (64).
+
 ## 1.6.4 — 2026-11-14
 
 ### Fixed

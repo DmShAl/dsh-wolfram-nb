@@ -20,7 +20,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
-const BRIDGE_VERSION = '1.3.2'
+const BRIDGE_VERSION = '1.3.3'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
 const DEFAULT_MAX_RUNNING_JOBS = 4

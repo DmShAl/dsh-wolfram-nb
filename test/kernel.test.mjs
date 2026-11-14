@@ -76,7 +76,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /Bridge: 1\.3\.2/)
+  assert.match(status.summary, /Bridge: 1\.3\.3/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -553,6 +553,17 @@ test('a large result falls back to plain text instead of blocking on typesetting
   const big = await tools.get('wolfram_eval').execute({ code: 'Range[10^5]' }, {})
   assert.equal(big.ok, true)
   assert.ok(Date.now() - started < 40_000, 'a big value must come back as text')
+})
+
+test('a deeply nested result does not block on MathML conversion', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // 401 leaves pass the leaf budget but depth 400 made MathML run for minutes.
+  const started = Date.now()
+  const result = await tools.get('wolfram_eval').execute({ code: 'Nest[List, 1, 400]' }, {})
+  assert.equal(result.ok, true)
+  assert.ok(Date.now() - started < 30_000, 'deep nesting must not be typeset')
 })
 
 test('console output reads like a notebook, without InputForm quotes', async (t) => {
