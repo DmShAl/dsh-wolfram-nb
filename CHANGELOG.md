@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.4 — 2026-11-14
+
+### Fixed
+
+- **A large result no longer blocks the kernel.** `ExportString[value, "MathML"]` goes through
+  LibraryLink, ignores `Abort`, and degrades sharply with size — `Range[10^5]` hung the call for
+  the whole 180 s timeout and `Range[10^3]` already hit `$RecursionLimit`. Values above
+  `$maxTypesetLeaves` (500) or `$maxTypesetBytes` (200 KB) now skip MathML/TeX and are shown as
+  `InputForm` text; the largest values are replaced by a one-line size summary.
+- **Console lines no longer carry `InputForm` quotes.** `Print["x = ", 5]` reached the console as
+  `"x = "5`; quoted fragments at the start of a line are now decoded.
+
 ## 1.6.3 — 2026-11-14
 
 ### Fixed

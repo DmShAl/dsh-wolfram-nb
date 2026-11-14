@@ -76,7 +76,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /Bridge: 1\.3\.1/)
+  assert.match(status.summary, /Bridge: 1\.3\.2/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -537,6 +537,33 @@ test('wolfram_alpha is registered', (t) => {
   const { tools, cleanups } = makeHarness()
   t.after(() => { for (const cleanup of cleanups) cleanup() })
   assert.ok(tools.has('wolfram_alpha'))
+})
+
+test('a large result falls back to plain text instead of blocking on typesetting', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // MathML/TeX export of a 100k-element list used to run for minutes and ignore
+  // Abort, so the whole call timed out; the size budget now skips typesetting.
+  const started = Date.now()
+  const result = await tools.get('wolfram_eval').execute({ code: 'Range[10^5]; "done"' }, {})
+  assert.equal(result.ok, true)
+  assert.ok(Date.now() - started < 30_000, 'large result must not block on typesetting')
+
+  const big = await tools.get('wolfram_eval').execute({ code: 'Range[10^5]' }, {})
+  assert.equal(big.ok, true)
+  assert.ok(Date.now() - started < 40_000, 'a big value must come back as text')
+})
+
+test('console output reads like a notebook, without InputForm quotes', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_eval').execute(
+    { code: 'Print["x = ", 5]', exportNotebook: false },
+    {},
+  )
+  assert.match(result.summary, /x = 5/)
 })
 
 test('a cell that clears the Global context still returns its result', async (t) => {

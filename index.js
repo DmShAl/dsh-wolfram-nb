@@ -20,7 +20,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
-const BRIDGE_VERSION = '1.3.1'
+const BRIDGE_VERSION = '1.3.2'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
 const DEFAULT_MAX_RUNNING_JOBS = 4
@@ -79,6 +79,16 @@ const INERT_PATTERN = /^(Integrate|Solve|Reduce|DSolve|NDSolve|Simplify|FullSimp
 /** Quote a Wolfram Language string literal. */
 function wlString(value) {
   return `"${String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n')}"`
+}
+
+/** The kernel writes `Print` output with string arguments in InputForm, so a line
+ *  reads `"x = "5` instead of `x = 5`. Decode the quoted fragments of such lines
+ *  (only when the line starts with a quote) so the console looks like a notebook. */
+function unquoteConsoleLine(line) {
+  if (typeof line !== 'string' || !line.startsWith('"')) return line
+  return line.replace(/"((?:[^"\\]|\\.)*)"/g, (match, body) => {
+    try { return JSON.parse(`"${body}"`) } catch { return match }
+  })
 }
 
 /** Parse the JSON payload the kernel prints after a marker (e.g. @@WB_VERIFY@@). */
@@ -335,7 +345,7 @@ class WolframKernel {
     const waiter = this.activeId === null ? undefined : this.waiters.get(this.activeId)
     if (waiter !== undefined && line.trim() !== '' && !line.startsWith('@@WB_')) {
       if (!/^Connecting\.\.\./.test(line) && !/^Elapsed time\b/.test(line)) {
-        waiter.console.push(line)
+        waiter.console.push(unquoteConsoleLine(line))
         waiter.onOutput?.(line)
       }
     }

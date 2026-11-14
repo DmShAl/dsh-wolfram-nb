@@ -7,9 +7,16 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.3.1";
+WolframBridge`$version = "1.3.2";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
+(* MathML/TeX conversion goes through LibraryLink, does not respond to Abort, and
+   degrades badly with size: a few thousand elements already take minutes (MathML
+   hits $RecursionLimit), so a long list used to block the whole kernel. Above
+   these budgets the value is shown as plain text instead of being typeset. *)
+WolframBridge`$maxTypesetLeaves = 500;
+WolframBridge`$maxTypesetBytes = 200000;
+WolframBridge`$maxInputFormBytes = 4000000;
 WolframBridge`$cellTimeout = 300;
 WolframBridge`$imageTimeout = 30;
 
@@ -44,13 +51,21 @@ WolframBridge`exportImage[value_] := Module[{png},
 ];
 
 WolframBridge`expressionRecord[index_Integer, value_, timing_Integer] := Module[
-  {inputForm, mathml, tex},
-  inputForm = WolframBridge`safeString[
-    Quiet@Check[ToString[value, InputForm], "$Failed"], "$Failed"];
-  mathml = Quiet@Check[
-    TimeConstrained[ExportString[value, "MathML"], 10, ""], ""];
-  tex = Quiet@Check[
-    TimeConstrained[ToString[TeXForm[value]], 10, ""], ""];
+  {inputForm, mathml = "", tex = "", size, typeset},
+  size = Quiet@Check[ByteCount[value], Infinity];
+  typeset = NumberQ[size] && size <= WolframBridge`$maxTypesetBytes &&
+    Quiet@Check[LeafCount[value], Infinity] <= WolframBridge`$maxTypesetLeaves;
+  inputForm = If[! NumberQ[size] || size > WolframBridge`$maxInputFormBytes,
+    "<" <> ToString[Head[value]] <> " with " <> ToString[Quiet@Check[LeafCount[value], 0]] <>
+      " subexpressions, " <> ToString[Round[size/1024]] <> " KB: too large to print in full>",
+    WolframBridge`safeString[
+      Quiet@Check[TimeConstrained[ToString[value, InputForm], 30, "$Failed"], "$Failed"], "$Failed"]];
+  If[typeset,
+    mathml = Quiet@Check[
+      TimeConstrained[ExportString[value, "MathML"], 10, ""], ""];
+    tex = Quiet@Check[
+      TimeConstrained[ToString[TeXForm[value]], 10, ""], ""];
+  ];
   <|"index" -> index, "kind" -> "expression", "timingMs" -> timing,
     "inputForm" -> WolframBridge`limit[inputForm, WolframBridge`$maxInputForm],
     "mathml" -> If[StringQ[mathml], mathml, ""],
