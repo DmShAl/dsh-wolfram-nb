@@ -1,0 +1,6 @@
+# Сессионные артефакты: не коммитим
+.dsh-wolfram/
+wolfram-notebooks/
+wolfram-plots/
+_work/
+tasks/**/_work/

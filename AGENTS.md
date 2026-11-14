@@ -63,4 +63,18 @@
 - `wolfram_state clear` чистит только Global-имена без `$`.
 - `wolfram_verify identity` сначала пробует `Simplify[lhs-rhs, assumptions]`.
 - `wolfram_job` публикует графику в панель; `wolfram_batch` — параллельные ядра.
-- Пример отчёта: `report/lorenz-report.pdf` (LaTeX, формулы, 2D/3D-графики).
+- Пример отчёта: `examples/lorenz-example/report.pdf` (LaTeX, формулы, 2D/3D-графики).
+
+## Структура репозитория
+
+- `index.js`, `bridge.wl`, `client.js`, `kernel-discovery.js`, `test/`, `scripts/` — код плагина.
+- `workspace/` — стартовый каталог для расчётных сессий: `AGENTS.md` (инструкции сессии),
+  `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `extract-md.cmd`, шаблоны),
+  `NOTES.md`, `.gitignore`. Его копируют в новое место и работают там — расчёты в самом
+  репозитории не ведём, чтобы не смешивать код и результаты.
+- `examples/` — готовые задачи как образцы (`bathtub-vortex`, `ode-second-order`,
+  `lorenz-example`): `TASK.md`, отчёт MD/TeX, сборка DOCX/PDF, `_plots/`.
+- В npm-пакет (`files` в `package.json`) ни `workspace/`, ни `examples/` не входят.
+- `D:\Projects\Hardness\dsh-wolfram-nb_Priv\notes\` — приватные заметки (LEDGER, журналы
+  сессий). Живут рядом с репозиторием и внутрь не переносятся: публичный checkout не должен
+  получить их случайно.
