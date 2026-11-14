@@ -256,8 +256,13 @@ class WolframKernel {
     child.stdin.on('error', () => { /* the kernel may already be gone */ })
     child.stdout.on('data', chunk => this.onData(chunk))
     child.stderr.on('data', chunk => { this.stderr = `${this.stderr}${chunk}`.slice(-4000) })
-    child.on('error', error => this.failAll(error))
-    child.on('exit', (code) => this.failAll(new Error(`Wolfram kernel exited (code ${code}). ${this.stderr.slice(-800)}`)))
+    // A replaced kernel exits ~400 ms after dispose(), by which time a new process
+    // may already be starting; its exit must not fail the new kernel's waiters.
+    child.on('error', error => { if (this.proc === child) this.failAll(error) })
+    child.on('exit', (code) => {
+      if (this.proc !== child) return
+      this.failAll(new Error(`Wolfram kernel exited (code ${code}). ${this.stderr.slice(-800)}`))
+    })
 
     this.readyPromise = new Promise((resolveReady, rejectReady) => {
       this.resolveReady = resolveReady

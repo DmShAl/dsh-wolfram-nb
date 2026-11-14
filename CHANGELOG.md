@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.6 — 2026-11-14
+
+### Fixed
+
+- **A replaced kernel's exit no longer fails the next call.** `dispose()` kills the old process
+  ~400 ms later, and its `exit` event rejected every waiter — including the call that had already
+  started on the fresh kernel ("Wolfram kernel exited (code 0)." right after a timeout or
+  `wolfram_notebook action=reset`). The handler now ignores a child that is no longer current.
+
+### Documentation
+
+- `wolfram_render`, `wolfram_state` and `wolfram_verify` retry a marked call once; the retried
+  calls are idempotent (they overwrite a file or read state), which is why the retry is safe.
+- `ClearAll["*"]` (every context, unlike `ClearAll["Global`*"]`) also drops the bridge symbols.
+  The session then stalls until the call times out and the kernel is recreated; definitions are
+  lost anyway, so this is documented rather than guarded.
+
 ## 1.6.5 — 2026-11-14
 
 ### Fixed
