@@ -90,6 +90,13 @@ if not defined PKGNAME (
 )
 
 del /q *.tgz >nul 2>nul
+rem A package.json written by PowerShell's Set-Content starts with a UTF-8 BOM;
+rem dsh then rejects the packed plugin ("Unexpected token '﻿'"). Fail here instead.
+node -e "const fs=require('fs');const b=fs.readFileSync('package.json');if(b[0]===0xEF&&b[1]===0xBB){console.error('[build-tgz] package.json starts with a UTF-8 BOM; rewrite it without one');process.exit(1)};JSON.parse(b.toString('utf8'))"
+if errorlevel 1 (
+  echo [build-tgz] package.json is not clean UTF-8 JSON.
+  exit /b 1
+)
 echo [build-tgz] packing %PKGNAME% %VERSION%
 call npm pack
 if errorlevel 1 (

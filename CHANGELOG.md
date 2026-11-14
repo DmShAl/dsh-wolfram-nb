@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.7 — 2026-11-14
+
+### Added
+
+- **`DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH=1`** keeps a kernel whose `bridge.wl` version differs
+  from the host's expectation. While developing the plugin the two files are installed in
+  separate steps, and the running host can be one version ahead; with the flag the kernel starts,
+  `wolfram_notebook status` names the mismatch, and no restart dance is needed.
+
+### Changed
+
+- `wolfram_render` documents that the expression is evaluated in the session kernel, so it can
+  render a graphics value defined by an earlier `wolfram_eval` (`expr="fig"`).
+- `build-tgz.bat` refuses to pack a `package.json` that is not clean UTF-8 JSON. A BOM written by
+  PowerShell's `Set-Content` used to produce a tgz that `dsh plugin add` rejected only after
+  touching the profile.
+
 ## 1.6.6 — 2026-11-14
 
 ### Fixed

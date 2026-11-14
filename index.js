@@ -305,8 +305,16 @@ class WolframKernel {
       this.bridgeVersion = bridgeVersion
       this.kernelVersion = kernelVersion
       if (bridgeVersion !== BRIDGE_VERSION) {
+        // While developing the plugin, index.js and bridge.wl are installed in
+        // separate steps and the running host can be one version ahead. Setting
+        // DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH=1 keeps such a kernel usable.
+        if (process.env.DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH === '1') {
+          this.bridgeMismatch = `host expects ${BRIDGE_VERSION}, bridge.wl reports ${bridgeVersion === '' ? 'none' : bridgeVersion}`
+          this.resolveReady?.(payload)
+          return
+        }
         this.rejectReady?.(new Error(
-          `Wolfram bridge version mismatch: host expects ${BRIDGE_VERSION}, bridge.wl reports ${bridgeVersion === '' ? 'none' : bridgeVersion}. Update bridge.wl and index.js together.`))
+          `Wolfram bridge version mismatch: host expects ${BRIDGE_VERSION}, bridge.wl reports ${bridgeVersion === '' ? 'none' : bridgeVersion}. Update bridge.wl and index.js together, or set DSH_WOLFRAM_ALLOW_BRIDGE_MISMATCH=1 to keep the kernel.`))
         this.dispose()
         return
       }
@@ -785,7 +793,8 @@ export function apply(ctx, config = {}) {
         const runtime = kernel === undefined
           ? ''
           : ` Args: ${kernel.kernelArgs.length === 0 ? 'none' : kernel.kernelArgs.join(' ')}. Timeout: ${Math.round(kernel.timeoutMs / 1000)} s.`
-        const bridge = ` Bridge: ${kernel?.bridgeVersion ?? 'n/a'} (Mathematica ${kernel?.kernelVersion ?? 'n/a'}). Evaluations: ${stats.evaluations}, timeouts: ${stats.timeouts}, restarts: ${stats.restarts}.`
+        const mismatch = kernel?.bridgeMismatch ? ` (version mismatch allowed: ${kernel.bridgeMismatch})` : ''
+        const bridge = ` Bridge: ${kernel?.bridgeVersion ?? 'n/a'}${mismatch} (Mathematica ${kernel?.kernelVersion ?? 'n/a'}). Evaluations: ${stats.evaluations}, timeouts: ${stats.timeouts}, restarts: ${stats.restarts}.`
         const summary = kernel === undefined
           ? `No kernel is running for this session (${context.cwd}). ${discovery}${bridge}`
           : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery}${runtime}${bridge} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
@@ -1487,6 +1496,7 @@ export function apply(ctx, config = {}) {
     description: [
       'Render a Wolfram Language graphics expression to an image file (PNG/SVG/PDF/JPG) with publication defaults.',
       'Use it instead of hand-writing Export: it creates the target directory, sets ImageResolution and reports the file size.',
+      'The expression is evaluated in the session kernel, so it may use symbols defined by an earlier wolfram_eval call (for example expr="fig" after fig = Plot[...]).',
       'Example: expr="Plot[Sin[x], {x, 0, 2 Pi}]", format="png".',
     ].join(' '),
     parameters: {
