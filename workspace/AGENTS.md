@@ -4,11 +4,14 @@
 `dsh-wolfram-nb\workspace`; плагин (`dsh-wolfram-nb`) и сборка отчётов (`dsh-pdfconv`)
 живут отдельно, здесь только задачи, данные и отчёты.
 
+Файл самодостаточен: все правила Mathematica, рисунков и отчётов собраны здесь, поэтому
+глобальный `~\.dsh\AGENTS.md` не нужен. Если в каталоге задачи лежит свой `AGENTS.md` или
+`CLAUDE.md`, он имеет приоритет над этими правилами.
+
 ## Начало сессии
 
-- Работаем в текущем каталоге или в том, который назвал пользователь.
-- Обязательного `tasks\` нет: задача может жить в любом каталоге. `tasks\` — просто
-  удобный хаб, если задач несколько.
+- Работаем в текущем каталоге или в том, который назвал пользователь. Обязательного `tasks\`
+  нет: задача может жить в любом каталоге. `tasks\` — просто удобный хаб, если задач несколько.
 - Если задача названа — прочитай `TASK.md` в её каталоге (если он есть) и продолжай.
 - Прочитай `NOTES.md` — короткий журнал: что сделано в прошлые сессии.
 - **Подтверди готовность.** Если в каталоге есть `AGENTS.md` и `tools\`, вызови
@@ -16,6 +19,7 @@
   компонентов найдено, есть ли git-репозиторий, и что можно ставить задачу. Если чего-то
   нет — перечисли, чего именно, и предложи `/initmath`. То же самое сделай на следующем
   ходу после того, как каталог только что подготовили кнопкой InitMath.
+- Одна задача — один каталог; не смешивай несколько задач в одном каталоге.
 
 ## Структура
 
@@ -28,37 +32,53 @@
 | `wolfram-notebooks\` | `.nb`, только при `exportNotebook: true` |
 | `.dsh-wolfram\` | служебное: `latest.json`, временные файлы, сохранения состояния |
 
+## Инструменты
+
+| Инструмент | Назначение |
+|---|---|
+| `wolfram_eval` | постоянное ядро: вычисления, серии ячеек |
+| `wolfram_alpha` | Wolfram\|Alpha, пошаговые решения |
+| `wolfram_job` | долгие вычисления в фоне (submit/status/result/cancel/list; 30 мин по умолчанию) |
+| `wolfram_batch` | независимые прогоны в отдельных ядрах (`maxParallel`) |
+| `wolfram_verify` | проверка результата: identity/ode/integral/antiderivative, статусы |
+| `wolfram_render` | рисунок в файл: PNG/SVG/PDF/JPG, MaTeX подгружается сам |
+| `wolfram_state` | состояние ядра: status/symbols/save/load/clear |
+| `wolfram_notebook` | `.nb` в панели: open/reset/status |
+| `pdfconv_convert` | `.md`/`.tex` → `pdf`+`docx`, `.docx` → `md`; существующие файлы не перезаписывает без `overwrite: true` |
+| `pdfconv_check` | окружение PDFConv: Pandoc, MiKTeX, пакеты LaTeX, шрифты, пробная сборка |
+| `wolfram_ready` | готов ли каталог: `AGENTS.md`/`tools`, компоненты, git |
+
 ## Окружение
 
 - Ядро: `C:\Program Files\Wolfram Research\Wolfram\15.0\math.exe`.
-- Инструменты: `wolfram_eval`, `wolfram_alpha`, `wolfram_job`, `wolfram_verify`,
-  `wolfram_state`, `wolfram_render`, `wolfram_batch`, `wolfram_notebook`;
-  для PDFConv — `pdfconv_convert`, `pdfconv_check`.
 - MaTeX 1.7.10 настроен на MiKTeX (`C:\Program Files\MiKTeX`); `wolfram_render`
   подгружает его сам при наличии `MaTeX[...]`. Первый рендер ~60 с.
 - Физические пакеты в `%APPDATA%\Wolfram\Applications`: FeynCalc (+FeynArts), xAct,
   Package-X, SciDraw; дистрибутив — `D:\Distr\LLM\HarnessLLM\WolframPackages`.
+- PDFConv: `D:\Projects\PDFConv` (`src\convert.py`), окружение проверяет `pdfconv_check`.
 - Python 3.14: `C:\Tools\Scripts\Python314\python.exe` (numpy, pandas, scipy, statsmodels,
   matplotlib, pymupdf) — через `ExternalEvaluate` или напрямую.
-- R 4.5.3: `C:\Tools\R\R-4.5.3` (в `PATH`), RLink через `Needs["RLink`"]; `InstallR[]`.
+- R 4.5.3: `C:\Tools\R\R-4.5.3` (в `PATH`), RLink через `Needs["RLink`"]`; `InstallR[]`.
 
 ## Правила работы
 
 - `Needs[...]` — в отдельной ячейке от кода, иначе символы уходят в `Global``.
 - Долгие расчёты — `wolfram_job` (30 мин) или `wolfram_batch` для независимых прогонов.
-- Результат после `Integrate`/`Solve`/`DSolve` проверять через `wolfram_verify`.
+- Результат после `Integrate`/`Solve`/`DSolve` проверять через `wolfram_verify`; численную
+  проверку не выдавать за доказательство.
 - Промежуточные определения сохранять `wolfram_state save` перед паузами.
 - Рисунки сохранять файлами (`wolfram_render`): финальные — в `_plots\` задачи, черновые —
   в `_work\`; смотреть через `read_image`, а не выводить голый `Graphics` в панель.
 - `Needs`/MaTeX — отдельной ячейкой; SciDraw в headless не применяет диапазоны —
   для публикационных рисунков `Plot` + MaTeX.
+- FeynCalc + FeynArts: `$FAPatch = False; $LoadFeynArts = True; Needs["FeynCalc`"]`.
 
 ## Задача = отдельный каталог
 
 Одна задача — один каталог, где бы он ни был. В корне задачи: `TASK.md`, `code.wl`
 (исходник на Wolfram Language, по которому воспроизводятся числа и рисунки) и результаты
-(`report.md`, `report.docx`, `report.pdf`); служебное — `_data\` (входные данные),
-`_work\` (временные файлы, можно удалять), `_plots\` (финальные рисунки).
+(`report.md`, `report.docx`, `report.pdf`); служебное — `_data\` (входные данные, только
+читать), `_work\` (временные файлы, можно удалять), `_plots\` (финальные рисунки).
 
 Каркас создаётся одной командой: `node tools\new-task.mjs <имя>`.
 
@@ -71,6 +91,7 @@
    не трогать существующие docx/pdf, код 3). Прямой вызов:
    `py -3 D:\Projects\PDFConv\src\convert.py --formats docx,pdf <путь>`.
    Рядом появятся `report.docx` (формулы — редактируемые объекты Word) и `report.pdf`.
+   Существующие результаты по умолчанию не перезаписываются — нужен `overwrite: true`.
 3. Проверка: `tools\pdfcheck.cmd report.pdf --pages 1,3 --out _work` — страницы, объём
    текста, число кириллических символов, первые строки и рендер страниц в PNG
    (консоль переключается в UTF-8, иначе кириллица — кракозябры).

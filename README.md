@@ -126,6 +126,10 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 `data\`. Существующие файлы не перезаписываются без `--force`, а папка внутри репозитория
 плагина отклоняется: код и результаты не должны жить вместе.
 
+`AGENTS.md` из `workspace\` самодостаточен: правила Mathematica, рисунков и отчётов собраны в
+нём одном, поэтому глобальный `~\.dsh\AGENTS.md` не нужен — на новой машине достаточно
+поставить плагины `dsh-wolfram-nb` и `dsh-pdfconv` и вызвать `/initmath`.
+
 Дальше — `node tools\new-task.mjs <имя>`, расчёт инструментами `wolfram_*`, отчёт через
 `tools\build-report.cmd` и проверка `tools\pdfcheck.cmd`. Все артефакты сессии
 (`wolfram-plots\`, `wolfram-notebooks\`, `.dsh-wolfram\`) пишутся в рабочую папку сессии, а не

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.1 — 2026-11-16
+
+### Changed
+
+- **`workspace/AGENTS.md` is now the single source of rules.** The template that `/initmath` copies
+  carries everything a calculation session needs: a table of the `wolfram_*` and `pdfconv_*` tools
+  with what each one is for, the PDFConv location and the `overwrite: true` rule, the FeynCalc +
+  FeynArts load line, and the note that a project's own `AGENTS.md` wins. A machine-global
+  `~/.dsh/AGENTS.md` with the same Mathematica rules is no longer required: a new machine needs
+  only the plugins `dsh-wolfram-nb` and `dsh-pdfconv`.
+
 ## 1.9.0 — 2026-11-15
 
 ### Added

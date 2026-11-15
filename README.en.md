@@ -132,6 +132,10 @@ It copies `workspace\` — `AGENTS.md` (the rules for a calculation session), `N
 `data\`. Existing files are kept unless `--force`, and a folder inside the plugin repository is
 refused.
 
+`AGENTS.md` from `workspace\` is self-contained: the rules for Mathematica, figures and reports
+live in it, so a machine-global `~/.dsh/AGENTS.md` is not needed — a new machine only needs the
+plugins `dsh-wolfram-nb` and `dsh-pdfconv`, then `/initmath`.
+
 Next: `node tools\new-task.mjs <name>`, compute with the `wolfram_*` tools, build the report with
 `tools\build-report.cmd`, check it with `tools\pdfcheck.cmd`. Session artifacts (`wolfram-plots\`,
 `wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never to the repository.

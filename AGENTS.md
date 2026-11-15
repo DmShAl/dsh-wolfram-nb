@@ -7,7 +7,7 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.6.9** (bridge 1.3.3) установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.9.1** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin --profile desktop add file:<tgz>`. Подробности в `INSTALL.md`.
@@ -70,7 +70,9 @@
 
 - `index.js`, `bridge.wl`, `client.js`, `kernel-discovery.js`, `scaffold.js`, `test/`, `scripts/` —
   код плагина.
-- `workspace/` — стартовый каталог для расчётных сессий: `AGENTS.md` (инструкции сессии),
+- `workspace/` — стартовый каталог для расчётных сессий: `AGENTS.md` (инструкции сессии,
+  самодостаточные: инструменты, Mathematica, рисунки, отчёты — глобальный `~\.dsh\AGENTS.md`
+  для расчётов не нужен),
   `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `extract-md.cmd`, шаблоны),
   `NOTES.md`, `gitignore` (шаблон `.gitignore`; npm не пропускает файл с точкой в имени,
   `scaffold.js` переименовывает его при копировании). Его копируют в новое место и работают
