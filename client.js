@@ -14,6 +14,7 @@ window.__ModuleLoader__.load({
     const LATEST = '.dsh-wolfram/latest.json'
     const NOTEBOOK_DIR = 'wolfram-notebooks'
     const OPEN_COMMAND = '/wolfram-open'
+    const INIT_COMMAND = '/initmath'
     const POLL_MS = 1500
 
     const en = {
@@ -50,6 +51,12 @@ window.__ModuleLoader__.load({
       'kind.timeout': 'Evaluation timed out.',
       'kind.fallback': 'Output could not be typeset.',
       'kind.opened': 'Opened notebook',
+      'init.chip': 'InitMath',
+      'init.title': 'Prepare this folder for calculations: AGENTS.md, tools/, tasks/ and data/',
+      'init.busy': 'Preparing…',
+      'init.done': 'Folder prepared',
+      'init.failed': 'Could not prepare the folder.',
+      'init.noCommand': 'This build does not expose the /initmath command channel.',
     }
 
     const zh = {
@@ -86,6 +93,12 @@ window.__ModuleLoader__.load({
       'kind.timeout': '计算超时。',
       'kind.fallback': '输出无法排版。',
       'kind.opened': '已打开的笔记本',
+      'init.chip': 'InitMath',
+      'init.title': '准备当前目录以便计算：AGENTS.md、tools、tasks 与 data',
+      'init.busy': '准备中…',
+      'init.done': '目录已准备好',
+      'init.failed': '无法准备目录。',
+      'init.noCommand': '当前版本没有暴露 /initmath 命令通道。',
     }
 
     const CSS = `
@@ -145,6 +158,80 @@ window.__ModuleLoader__.load({
         return result.value
       }
       return result
+    }
+
+    /** Resolves the host command channel; set by `apply` so the composer chip can use it. */
+    let commandChannel = () => undefined
+
+    const CHIP_CSS = `
+.dsw-wl-chipwrap{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.dsw-wl-chip{box-sizing:border-box;display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1;cursor:pointer;transition:background-color .12s cubic-bezier(.2,.8,.2,1),border-color .12s cubic-bezier(.2,.8,.2,1)}
+.dsw-wl-chip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.dsw-wl-chip:disabled{opacity:.6;cursor:default}
+.dsw-wl-chipnote{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.dsw-wl-chipok{color:var(--dsw-alias-state-success-primary,#2e7d32)}
+.dsw-wl-chipfail{color:var(--dsw-alias-state-error-primary,#c62828)}
+`
+
+    function installChipStyles() {
+      const tag = document.createElement('style')
+      tag.setAttribute('data-plugin-css', 'dsh-wolfram-nb')
+      tag.textContent = CHIP_CSS
+      document.head.appendChild(tag)
+      return () => { tag.remove() }
+    }
+
+    /**
+     * Composer chip next to Compact: one click prepares the session folder
+     * (AGENTS.md, tools/, tasks/, data/) by running the host `/initmath` command.
+     */
+    function InitMathChip(props) {
+      const t = props.t ?? ((key) => key)
+      const [busy, setBusy] = React.useState(false)
+      const [note, setNote] = React.useState(null)
+      const timer = React.useRef(null)
+      React.useEffect(() => () => {
+        if (timer.current !== null) clearTimeout(timer.current)
+      }, [])
+      const flash = (value) => {
+        setNote(value)
+        if (timer.current !== null) clearTimeout(timer.current)
+        timer.current = setTimeout(() => setNote(null), 6000)
+      }
+      const run = async () => {
+        if (busy) return
+        setBusy(true)
+        try {
+          const channel = commandChannel()
+          if (channel?.execute === undefined) throw new Error(t('init.noCommand'))
+          const executed = unwrapRemote(await channel.execute(
+            String(props.sessionId ?? ''),
+            INIT_COMMAND,
+            [],
+            new AbortController().signal,
+          ))
+          const outcome = executed?.result ?? executed
+          if (outcome?.kind === 'error') throw new Error(outcome.text || t('init.failed'))
+          flash({ ok: true, text: String(outcome?.text ?? t('init.done')).split('\n')[0] })
+        } catch (error) {
+          flash({ ok: false, text: String(error?.message ?? error) })
+        } finally {
+          setBusy(false)
+        }
+      }
+      return h('div', { className: 'dsw-wl-chipwrap' },
+        h('button', {
+          type: 'button',
+          className: 'dsw-wl-chip',
+          disabled: busy,
+          title: t('init.title'),
+          onClick: run,
+        }, busy ? t('init.busy') : t('init.chip')),
+        note === null ? null : h('span', {
+          className: 'dsw-wl-chipnote' + (note.ok ? ' dsw-wl-chipok' : ' dsw-wl-chipfail'),
+          title: note.text,
+        }, note.text.length > 60 ? note.text.slice(0, 57) + '…' : note.text),
+      )
     }
 
     function decodeText(bytes) {
@@ -635,6 +722,21 @@ window.__ModuleLoader__.load({
             t,
           }),
         }, NotebookPanel)), 'wolfram notebook: panel body')
+        commandChannel = () => {
+          try {
+            return ctx.remote.commands
+          } catch {
+            return undefined
+          }
+        }
+        ctx.effect(installChipStyles, 'wolfram notebook: chip styles')
+        ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+          name: 'conversation.input.left',
+          id: 'dsh-wolfram-nb-initmath',
+          order: 46,
+          label: () => t('init.chip'),
+          locale: NS,
+        }, InitMathChip)), 'wolfram notebook: initmath chip')
         ctx.effect(autoOpen(ctx), 'wolfram notebook: auto open')
       },
     }

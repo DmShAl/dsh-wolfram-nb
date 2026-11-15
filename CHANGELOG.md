@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.1 — 2026-11-15
+
+### Added
+
+- **An `InitMath` chip in the composer**, next to Compact (slot `conversation.input.left`,
+  order 46). One click runs `/initmath` for the current session folder and flashes the result
+  ("Prepared … / 11 file(s) written" or the error) for a few seconds — no typed command and no
+  token spent. Registered the same way `dsh-compact-suite` registers its chips.
+
+### Tests
+
+- `test/client.test.mjs` loads `client.js` in a stub DOM, checks the chip registration and that a
+  click calls the host command channel with `/initmath`.
+
 ## 1.7.0 — 2026-11-15
 
 ### Added
