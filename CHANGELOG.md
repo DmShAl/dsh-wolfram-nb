@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0 — 2026-11-15
+
+### Added
+
+- **`wolfram_ready` tool.** Reports whether the current folder can take a task: workspace files
+  (`AGENTS.md`, `tools/`), the environment count with the missing names, and the git repository
+  (branch, commit count, dirty or clean). The workspace `AGENTS.md` now tells a session to call it
+  at the start and to confirm readiness in the first reply — so a prepared folder opens with
+  "environment ready, we can start" instead of silence.
+- `/initmath` ends its report with `All good — ready for a task.` when every component is present.
+
 ## 1.8.1 — 2026-11-15
 
 ### Fixed

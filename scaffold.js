@@ -212,6 +212,16 @@ export function initGitRepository(dir, message = 'initmath: workspace template')
   return { ok: true, created: true, lfs, detail: `initialized (commit ${head.stdout || '?'}, ${suffix})` }
 }
 
+/** State of the folder's git repository, for the readiness report. */
+export function gitState(dir) {
+  if (!isGitRepository(dir)) return { repo: false }
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], dir).stdout
+  const commit = git(['rev-parse', '--short', 'HEAD'], dir).stdout
+  const commits = Number(git(['rev-list', '--count', 'HEAD'], dir).stdout) || 0
+  const dirty = git(['status', '--porcelain'], dir).stdout !== ''
+  return { repo: true, branch, commit, commits, dirty }
+}
+
 /** Stage everything and commit it; the safety net for a session's files. */
 export function gitSnapshot(dir, message = 'snapshot') {
   if (!isGitRepository(dir)) return { ok: false, detail: 'not a git repository — run /initmath first' }

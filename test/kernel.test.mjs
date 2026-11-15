@@ -560,6 +560,17 @@ test('checkEnvironment reports the components a calculation needs', (t) => {
   assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
 })
 
+test('wolfram_ready reports the workspace, git and environment state', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_ready').execute({}, {})
+  assert.match(result.summary, /Workspace:/)
+  assert.match(result.summary, /Environment: \d+\/\d+ OK/)
+  assert.match(result.summary, /Git:/)
+  assert.equal(typeof result.ok, 'boolean')
+})
+
 test('initmath initializes a git repository and can snapshot the work', (t) => {
   if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
     t.skip('git is not installed on this machine')

@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
-import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot } from './scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot, gitState } from './scaffold.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BRIDGE_PATH = join(HERE, 'bridge.wl')
@@ -1672,6 +1672,52 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const wolframReady = {
+    name: 'wolfram_ready',
+    description: [
+      'Report whether the current folder is ready for calculations: the workspace files (AGENTS.md, tools/),',
+      'the local git repository and the toolchain (Mathematica, PDFConv, Python, MiKTeX, Git, Node).',
+      'Call it at the start of a session in a prepared folder, or right after /initmath, and confirm the result to the user.',
+    ].join(' '),
+    parameters: { type: 'object', properties: {} },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          prepared: { type: 'boolean' },
+          envOk: { type: 'integer' },
+          envTotal: { type: 'integer' },
+          summary: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const cwd = context.cwd
+      const prepared = existsSync(join(cwd, 'AGENTS.md')) && existsSync(join(cwd, 'tools'))
+      const env = checkEnvironment()
+      const found = env.filter((item) => item.ok).length
+      const missing = env.filter((item) => !item.ok).map((item) => item.name)
+      const gitInfo = gitState(cwd)
+      const lines = [
+        `${prepared ? 'Ready' : 'Not prepared'}: ${cwd}`,
+        prepared
+          ? 'Workspace: AGENTS.md and tools/ present'
+          : 'Workspace: no AGENTS.md/tools — run /initmath to prepare this folder',
+        `Environment: ${found}/${env.length} OK${missing.length === 0 ? '' : ` (missing: ${missing.join(', ')})`}`,
+        gitInfo.repo
+          ? `Git: ${gitInfo.branch}, ${gitInfo.commits} commit(s), ${gitInfo.dirty ? 'uncommitted changes' : 'clean'}`
+          : 'Git: no repository — /initmath creates one, or run git init',
+        prepared && found === env.length
+          ? 'All good — ready for a task.'
+          : 'Not everything is in place; see the lines above.',
+      ]
+      return { ok: prepared && found === env.length, prepared, envOk: found, envTotal: env.length, summary: lines.join('\n') }
+    },
+  }
+
   ctx.effect(() => ctx.tools.register(wolframEval), 'wolfram notebook: wolfram_eval tool')
   ctx.effect(() => ctx.tools.register(wolframNotebook), 'wolfram notebook: wolfram_notebook tool')
   ctx.effect(() => ctx.tools.register(wolframJob), 'wolfram notebook: wolfram_job tool')
@@ -1680,6 +1726,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(wolframState), 'wolfram notebook: wolfram_state tool')
   ctx.effect(() => ctx.tools.register(wolframRender), 'wolfram notebook: wolfram_render tool')
   ctx.effect(() => ctx.tools.register(wolframBatch), 'wolfram notebook: wolfram_batch tool')
+  ctx.effect(() => ctx.tools.register(wolframReady), 'wolfram notebook: wolfram_ready tool')
 
   ctx.effect(() => () => {
     for (const job of jobs.values()) {
@@ -1750,6 +1797,7 @@ export function apply(ctx, config = {}) {
             lines.push(`  ${snapshot.ok ? 'OK  ' : 'MISS'}  Git repo      ${snapshot.detail}`)
           }
           lines.push('Next: node tools/new-task.mjs <task-name>')
+          if (found === env.length) lines.push('All good — ready for a task.')
           return { kind: found === env.length ? 'success' : 'error', text: lines.join('\n') }
         } catch (error) {
           return { kind: 'error', text: String(error?.message ?? error) }
