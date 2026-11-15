@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.2 — 2026-11-15
+
+### Added
+
+- **`/initmath` reports the environment** after scaffolding: Mathematica kernel, PDFConv, Python,
+  MiKTeX and Node, each with the path it found — `env 5/5 OK`, or `Missing: Python, MiKTeX`.
+  The chip shows that summary line and the full list on hover; the command is still `error` when
+  something is missing, so a broken machine is not reported as success.
+- **`/mathcheck` command** — the same report without touching any files.
+- `scaffold.js` prints the report after preparing a folder; `checkEnvironment()` is exported and
+  covered by a test.
+
 ## 1.7.1 — 2026-11-15
 
 ### Added

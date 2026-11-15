@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
-import { initMathWorkspace, isInsideRepository } from './scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment } from './scaffold.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BRIDGE_PATH = join(HERE, 'bridge.wl')
@@ -1724,16 +1724,44 @@ export function apply(ctx, config = {}) {
             }
           }
           const result = initMathWorkspace(target)
+          const env = checkEnvironment()
+          const found = env.filter((item) => item.ok).length
           const lines = [
-            `Prepared ${result.target}: ${result.created.length} file(s) written${result.skipped.length === 0 ? '' : `, ${result.skipped.length} kept (add --force to replace)`}.`,
-            'Start with: node tools/new-task.mjs <task-name>',
+            `Prepared ${result.target} (${result.created.length} new, ${result.skipped.length} kept) · env ${found}/${env.length} OK`,
+            ...env.map((item) => `  ${item.ok ? 'OK  ' : 'MISS'}  ${item.name.padEnd(12)}  ${item.detail}`),
           ]
-          return { kind: 'success', text: lines.join('\n') }
+          if (found < env.length) {
+            lines.push(`Missing: ${env.filter((item) => !item.ok).map((item) => item.name).join(', ')}`)
+          }
+          lines.push('Next: node tools/new-task.mjs <task-name>')
+          return { kind: found === env.length ? 'success' : 'error', text: lines.join('\n') }
         } catch (error) {
           return { kind: 'error', text: String(error?.message ?? error) }
         }
       },
     }), 'wolfram notebook: initmath command')
+
+    ctx.effect(() => commands.register({
+      name: 'mathcheck',
+      description: 'Check that Mathematica, PDFConv, Python and MiKTeX are available',
+      input: { hint: '(no arguments)' },
+      handler: async () => {
+        try {
+          const env = checkEnvironment()
+          const found = env.filter((item) => item.ok).length
+          const lines = [
+            `Environment ${found}/${env.length} OK`,
+            ...env.map((item) => `  ${item.ok ? 'OK  ' : 'MISS'}  ${item.name.padEnd(12)}  ${item.detail}`),
+          ]
+          if (found < env.length) {
+            lines.push(`Missing: ${env.filter((item) => !item.ok).map((item) => item.name).join(', ')}`)
+          }
+          return { kind: found === env.length ? 'success' : 'error', text: lines.join('\n') }
+        } catch (error) {
+          return { kind: 'error', text: String(error?.message ?? error) }
+        }
+      },
+    }), 'wolfram notebook: mathcheck command')
   }
 
   ctx.effect(() => {

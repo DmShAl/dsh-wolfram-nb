@@ -59,8 +59,9 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
-| `/initmath` 命令 | 准备计算目录：复制 `workspace\`（`AGENTS.md`、`tools\`）并创建 `tasks\`、`data\`；仓库内会被拒绝 |
-| `InitMath` 按钮 | 输入框左侧的小按钮（Compact 旁边），一键执行 `/initmath` 并在旁显示结果，不产生模型消息 |
+| `/initmath` 命令 | 准备计算目录：复制 `workspace\`（`AGENTS.md`、`tools\`）并创建 `tasks\`、`data\`；随后检查环境（Mathematica、PDFConv、Python、MiKTeX、Node）并报告缺什么；仓库内会被拒绝 |
+| `/mathcheck` 命令 | 只检查环境，不写任何文件 |
+| `InitMath` 按钮 | 输入框左侧的小按钮（Compact 旁边），一键执行 `/initmath` 并在旁显示结果（含 `env 5/5 OK`），不产生模型消息 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |
 | 持久内核 | 每个会话一个常驻 `math.exe`，变量与函数定义跨调用保留 |
 | `.nb` 导出（可选） | 传 `exportNotebook: true` 才把本次计算写成真正的 Mathematica 笔记本文件（`wolfram-notebooks/`）；默认只在面板渲染，不落盘 |

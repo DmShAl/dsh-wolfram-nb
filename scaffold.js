@@ -9,8 +9,10 @@
 // Also used by the `/initmath` DSH command, so the same code runs both from the
 // command line and from inside a session.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveKernel } from './kernel-discovery.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const TEMPLATE_DIR = join(HERE, 'workspace')
@@ -74,6 +76,91 @@ export function initMathWorkspace(target, options = {}) {
   return { target: root, created, skipped }
 }
 
+function firstExisting(candidates) {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate !== '' && existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+function findOnPath(names) {
+  const dirs = String(process.env.PATH ?? '').split(sep)
+  for (const dir of dirs) {
+    if (dir === '') continue
+    for (const name of names) {
+      const full = join(dir, name)
+      if (existsSync(full)) return full
+    }
+  }
+  return null
+}
+
+function findPdfConv() {
+  const direct = firstExisting([process.env.DSH_PDFCONV, 'D:\\Projects\\PDFConv\\src\\convert.py'])
+  if (direct !== null) return { detail: direct }
+  const home = process.env.DSH_HOME && process.env.DSH_HOME.trim() !== '' ? process.env.DSH_HOME : join(homedir(), '.dsh')
+  try {
+    for (const profile of readdirSync(join(home, 'profiles'))) {
+      const marker = join(home, 'profiles', profile, 'node_modules', 'dsh-pdfconv', 'package.json')
+      if (existsSync(marker)) return { detail: `${join(dirname(marker))} (plugin)` }
+    }
+  } catch { /* no profiles directory: fall through */ }
+  return { detail: 'convert.py not found (set DSH_PDFCONV or install dsh-pdfconv)' }
+}
+
+/**
+ * What a calculation session needs on this machine. Returns [{ name, ok, detail }];
+ * `detail` is the path that was found or a one-line hint on how to fix it.
+ */
+export function checkEnvironment() {
+  const items = []
+
+  try {
+    const kernel = resolveKernel()
+    items.push({ name: 'Mathematica', ok: true, detail: kernel.path })
+  } catch (error) {
+    items.push({ name: 'Mathematica', ok: false, detail: 'math.exe not found (install Mathematica or set WOLFRAM_KERNEL)' })
+  }
+
+  const pdfconv = findPdfConv()
+  items.push({ name: 'PDFConv', ok: ! /not found/.test(pdfconv.detail), detail: pdfconv.detail })
+
+  const python = firstExisting([process.env.DSH_PYTHON, 'C:\\Tools\\Scripts\\Python314\\python.exe'])
+    ?? findOnPath(['python.exe', 'python3.exe'])
+  items.push({
+    name: 'Python',
+    ok: python !== null,
+    detail: python ?? 'python not found (set DSH_PYTHON or add it to PATH)',
+  })
+
+  const latex = firstExisting([
+    'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe',
+    'C:\\Program Files\\MiKTeX\\miktex\\bin\\pdflatex.exe',
+  ]) ?? findOnPath(['pdflatex.exe'])
+  items.push({
+    name: 'MiKTeX',
+    ok: latex !== null,
+    detail: latex ?? 'pdflatex not found (install MiKTeX or add it to PATH)',
+  })
+
+  items.push({ name: 'Node', ok: true, detail: process.execPath })
+  return items
+}
+
+function formatEnvironment(items) {
+  const found = items.filter((item) => item.ok).length
+  const width = Math.max(...items.map((item) => item.name.length))
+  const lines = [`Environment ${found}/${items.length} OK`]
+  for (const item of items) {
+    lines.push(`  ${item.ok ? 'OK  ' : 'MISS'}  ${item.name.padEnd(width)}  ${item.detail}`)
+  }
+  const missing = items.filter((item) => !item.ok).map((item) => item.name)
+  if (missing.length > 0) lines.push(`Missing: ${missing.join(', ')}`)
+  return lines
+}
+
+export { formatEnvironment }
+
 function main(argv) {
   const args = argv.slice(2)
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
@@ -90,6 +177,8 @@ function main(argv) {
     if (result.skipped.length > 0) {
       console.log(`  kept   : ${result.skipped.join(', ')} (use --force to replace)`)
     }
+    console.log('')
+    for (const line of formatEnvironment(checkEnvironment())) console.log(line)
     console.log('')
     console.log('next: node tools/new-task.mjs <task-name>')
     return 0

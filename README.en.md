@@ -62,8 +62,9 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
-| `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`) and creates `tasks\` and `data\`; refuses the plugin repository |
-| `InitMath` button | Chip left of the composer (next to Compact): runs `/initmath` for the session folder and flashes the result, no model message |
+| `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`), creates `tasks\` and `data\`, then reports the environment (Mathematica, PDFConv, Python, MiKTeX, Node) and what is missing; refuses the plugin repository |
+| `/mathcheck` command | The same environment report without touching any files |
+| `InitMath` button | Chip left of the composer (next to Compact): runs `/initmath` for the session folder and flashes the result (including `env 5/5 OK`), no model message |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
 | Persistent kernel | One long-lived `math.exe` per session; variables and definitions survive across calls |
 | `.nb` export (opt-in) | Pass `exportNotebook: true` to also write the evaluation as a real Mathematica notebook file under `wolfram-notebooks/`; by default the panel renders the document and nothing is written to disk |

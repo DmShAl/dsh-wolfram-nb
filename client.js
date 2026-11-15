@@ -168,7 +168,7 @@ window.__ModuleLoader__.load({
 .dsw-wl-chip{box-sizing:border-box;display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1;cursor:pointer;transition:background-color .12s cubic-bezier(.2,.8,.2,1),border-color .12s cubic-bezier(.2,.8,.2,1)}
 .dsw-wl-chip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .dsw-wl-chip:disabled{opacity:.6;cursor:default}
-.dsw-wl-chipnote{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.dsw-wl-chipnote{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--dsw-alias-label-secondary)}
 .dsw-wl-chipok{color:var(--dsw-alias-state-success-primary,#2e7d32)}
 .dsw-wl-chipfail{color:var(--dsw-alias-state-error-primary,#c62828)}
 `
@@ -230,7 +230,7 @@ window.__ModuleLoader__.load({
         note === null ? null : h('span', {
           className: 'dsw-wl-chipnote' + (note.ok ? ' dsw-wl-chipok' : ' dsw-wl-chipfail'),
           title: note.text,
-        }, note.text.length > 60 ? note.text.slice(0, 57) + '…' : note.text),
+        }, note.text.length > 80 ? note.text.slice(0, 77) + '…' : note.text),
       )
     }
 

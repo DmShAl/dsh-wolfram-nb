@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { apply } from '../index.js'
-import { initMathWorkspace, isInsideRepository } from '../scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment } from '../scaffold.js'
 
 /**
  * Boot the plugin against a fake Cordis context and the real local kernel.
@@ -541,6 +541,22 @@ test('wolfram_alpha is registered', (t) => {
   const { tools, cleanups } = makeHarness()
   t.after(() => { for (const cleanup of cleanups) cleanup() })
   assert.ok(tools.has('wolfram_alpha'))
+})
+
+test('checkEnvironment reports the components a calculation needs', (t) => {
+  const items = checkEnvironment()
+  const names = items.map((item) => item.name)
+  for (const expected of ['Mathematica', 'PDFConv', 'Python', 'MiKTeX', 'Node']) {
+    assert.ok(names.includes(expected), `missing component ${expected}`)
+  }
+  for (const item of items) {
+    assert.equal(typeof item.ok, 'boolean')
+    assert.equal(typeof item.detail, 'string')
+    assert.ok(item.detail.length > 0)
+  }
+  // Node runs the plugin, so it is always found; the kernel was found by the tests above.
+  assert.equal(items.find((item) => item.name === 'Node').ok, true)
+  assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
 })
 
 test('initmath scaffolds a folder outside the repository', (t) => {
