@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
-import { initMathWorkspace, isInsideRepository, checkEnvironment } from './scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot } from './scaffold.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BRIDGE_PATH = join(HERE, 'bridge.wl')
@@ -1710,12 +1710,14 @@ export function apply(ctx, config = {}) {
 
     ctx.effect(() => commands.register({
       name: 'initmath',
-      description: 'Prepare a folder for Wolfram calculations (AGENTS.md, tools, NOTES)',
-      input: { hint: '[target folder; default: the session folder]' },
+      description: 'Prepare a folder for Wolfram calculations (AGENTS.md, tools, NOTES, local git)',
+      input: { hint: '[target folder] [--no-git]' },
       handler: async ({ agent, rawInput }) => {
         try {
           const context = await commandContext(agent)
-          const requested = String(rawInput ?? '').trim().replace(/^"(.*)"$/, '$1')
+          const raw = String(rawInput ?? '').trim()
+          const noGit = /(^|\s)--no-git(\s|$)/.test(raw)
+          const requested = raw.replace(/(^|\s)--no-git(\s|$)/g, ' ').trim().replace(/^"(.*)"$/, '$1')
           const target = requested === '' ? context.cwd : resolve(context.cwd, requested)
           if (isInsideRepository(target)) {
             return {
@@ -1733,6 +1735,10 @@ export function apply(ctx, config = {}) {
           if (found < env.length) {
             lines.push(`Missing: ${env.filter((item) => !item.ok).map((item) => item.name).join(', ')}`)
           }
+          if (!noGit) {
+            const snapshot = initGitRepository(target)
+            lines.push(`  ${snapshot.ok ? 'OK  ' : 'MISS'}  Git           ${snapshot.detail}`)
+          }
           lines.push('Next: node tools/new-task.mjs <task-name>')
           return { kind: found === env.length ? 'success' : 'error', text: lines.join('\n') }
         } catch (error) {
@@ -1740,6 +1746,22 @@ export function apply(ctx, config = {}) {
         }
       },
     }), 'wolfram notebook: initmath command')
+
+    ctx.effect(() => commands.register({
+      name: 'mathsave',
+      description: 'Commit the current folder to its local git repository',
+      input: { hint: '[commit message]' },
+      handler: async ({ agent, rawInput }) => {
+        try {
+          const context = await commandContext(agent)
+          const message = String(rawInput ?? '').trim() || `snapshot ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`
+          const result = gitSnapshot(context.cwd, message)
+          return { kind: result.ok ? 'success' : 'error', text: result.detail }
+        } catch (error) {
+          return { kind: 'error', text: String(error?.message ?? error) }
+        }
+      },
+    }), 'wolfram notebook: mathsave command')
 
     ctx.effect(() => commands.register({
       name: 'mathcheck',

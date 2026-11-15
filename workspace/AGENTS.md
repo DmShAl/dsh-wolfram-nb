@@ -82,8 +82,10 @@
 
 ## Git
 
-- Каталог может быть под git (ветка `main`); коммитить `TASK.md`, `code.wl`, `report.md`,
-  `report.docx/pdf`, `_plots\`, `tools\`, `NOTES.md`.
+- `/initmath` заводит в каталоге локальный репозиторий с первым коммитом, поэтому историю
+  можно не терять: зафиксировать текущее состояние — `/mathsave "что сделано"` (или обычный
+  `git commit`), посмотреть — `git log --oneline`.
+- Коммитить `TASK.md`, `code.wl`, `report.md`, `report.docx/pdf`, `_plots\`, `tools\`, `NOTES.md`.
 - Бинарные результаты (`*.pdf`, `*.docx`, `*.png`, `*.jpg`, `*.xlsx`) — в Git LFS
   (`.gitattributes`); при push в GitHub квота LFS ~1 ГБ хранения и трафика в месяц.
 - Не коммитить: `_work\`, `wolfram-notebooks\`, `wolfram-plots\`, `.dsh-wolfram\` —

@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, unlinkSync, existsSync } from 'node:fs'
+import { readFileSync, unlinkSync, existsSync, writeFileSync } from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { apply } from '../index.js'
-import { initMathWorkspace, isInsideRepository, checkEnvironment } from '../scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot } from '../scaffold.js'
 
 /**
  * Boot the plugin against a fake Cordis context and the real local kernel.
@@ -557,6 +558,30 @@ test('checkEnvironment reports the components a calculation needs', (t) => {
   // Node runs the plugin, so it is always found; the kernel was found by the tests above.
   assert.equal(items.find((item) => item.name === 'Node').ok, true)
   assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
+})
+
+test('initmath initializes a git repository and can snapshot the work', (t) => {
+  if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
+    t.skip('git is not installed on this machine')
+    return
+  }
+  const dir = join(mkdtempSync(join(tmpdir(), 'math-git-')), 'work')
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
+
+  initMathWorkspace(dir)
+  const init = initGitRepository(dir)
+  assert.equal(init.ok, true)
+  assert.match(init.detail, /initialized/)
+  assert.equal(existsSync(join(dir, '.git')), true)
+
+  // A second run on the same folder must not re-initialize it.
+  assert.match(initGitRepository(dir).detail, /already/)
+
+  writeFileSync(join(dir, 'result.txt'), 'answer\n', 'utf8')
+  const snapshot = gitSnapshot(dir, 'test snapshot')
+  assert.equal(snapshot.ok, true)
+  assert.match(snapshot.detail, /committed 1 file/)
+  assert.match(gitSnapshot(dir, 'again').detail, /nothing to commit/)
 })
 
 test('initmath scaffolds a folder outside the repository', (t) => {

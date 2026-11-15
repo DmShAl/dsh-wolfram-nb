@@ -59,7 +59,8 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
-| `/initmath` 命令 | 准备计算目录：复制 `workspace\`（`AGENTS.md`、`tools\`）并创建 `tasks\`、`data\`；随后检查环境（Mathematica、PDFConv、Python、MiKTeX、Node）并报告缺什么；仓库内会被拒绝 |
+| `/initmath` 命令 | 准备计算目录：复制 `workspace\`（`AGENTS.md`、`tools\`）、创建 `tasks\`/`data\`、初始化本地 git 仓库（首次提交），然后检查环境（Mathematica、PDFConv、Python、MiKTeX、Node）；`--no-git` 跳过 git；仓库内会被拒绝 |
+| `/mathsave` 命令 | 把当前会话目录暂存并提交到本地 git（`/mathsave "说明"`） |
 | `/mathcheck` 命令 | 只检查环境，不写任何文件 |
 | `InitMath` 按钮 | 输入框左侧的小按钮（Compact 旁边），一键执行 `/initmath` 并在弹出面板中显示完整结果（复制的文件 + 环境检查），不产生模型消息 |
 | 右侧笔记本面板 | 在对话旁实时渲染标题、正文、输入单元、MathML 公式、图形（PNG）、消息 |

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 — 2026-11-15
+
+### Added
+
+- **`/initmath` initializes a local git repository** in the prepared folder: `git init`, the
+  initial commit of `AGENTS.md`, `tools/`, `tasks/` and `data/`, `core.autocrlf=false`, and the
+  commit hash in the report (`Git  initialized (commit edded85)`). Pass `--no-git` to skip it, and
+  an existing repository is left untouched. Identity falls back to `DSH <dsh@localhost>` only when
+  git has no `user.name`, so a machine without a global git identity still gets its first commit.
+- **`/mathsave [message]`** — stages everything in the session folder and commits it, printing
+  `committed N file(s) as <hash>` or `nothing to commit`. This is the cheap safety net that keeps a
+  session from losing its files.
+- `scaffold.js` gained `--no-git`, prints the git line, and exports `initGitRepository()` /
+  `gitSnapshot()` (covered by a test).
+
 ## 1.7.3 — 2026-11-15
 
 ### Fixed
