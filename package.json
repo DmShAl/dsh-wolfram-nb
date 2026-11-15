@@ -1,6 +1,6 @@
 {
   "name": "dsh-wolfram-nb",
-  "version": "1.6.9",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -39,6 +39,8 @@
     "client.js",
     "kernel-discovery.js",
     "bridge.wl",
+    "scaffold.js",
+    "workspace",
     "README.md",
     "README.en.md",
     "CHANGELOG.md",

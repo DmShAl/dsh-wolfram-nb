@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.0 — 2026-11-15
+
+### Added
+
+- **`/initmath` command.** Prepares a calculation folder from the composer: copies the workspace
+  template (`AGENTS.md`, `NOTES.md`, `README.md`, `.gitignore`, `tools/`) and creates `tasks/`
+  and `data/`. Without an argument it prepares the session folder; a folder inside the plugin
+  repository is refused, because calculations must not mix with the code.
+- **`InitMath.cmd` and `scaffold.js`.** The same scaffolding from a double-click (Windows) or the
+  command line: `node scaffold.js "D:\work\my-task" [--force]`. Existing files are kept unless
+  `--force`.
+- **The workspace template ships in the package** (`files` now lists `workspace` and
+  `scaffold.js`), so `/initmath` works on an installed copy, not just in the repository. The
+  template stores its ignore file as `workspace/gitignore` because npm strips `.gitignore`;
+  `scaffold.js` renames it on copy.
+
 ## 1.6.9 — 2026-11-14
 
 ### Corrected

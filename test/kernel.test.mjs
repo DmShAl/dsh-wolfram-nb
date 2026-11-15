@@ -1,7 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, unlinkSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { apply } from '../index.js'
+import { initMathWorkspace, isInsideRepository } from '../scaffold.js'
 
 /**
  * Boot the plugin against a fake Cordis context and the real local kernel.
@@ -537,6 +541,27 @@ test('wolfram_alpha is registered', (t) => {
   const { tools, cleanups } = makeHarness()
   t.after(() => { for (const cleanup of cleanups) cleanup() })
   assert.ok(tools.has('wolfram_alpha'))
+})
+
+test('initmath scaffolds a folder outside the repository', (t) => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'math-init-')), 'work')
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
+
+  const result = initMathWorkspace(dir)
+  assert.ok(result.created.includes('AGENTS.md'))
+  assert.ok(result.created.includes('.gitignore'))
+  assert.ok(existsSync(join(dir, 'tools', 'new-task.mjs')))
+  assert.ok(existsSync(join(dir, 'NOTES.md')))
+
+  // A second run must not clobber files that already exist.
+  const again = initMathWorkspace(dir)
+  assert.equal(again.created.length, 0)
+  assert.equal(again.skipped.length, result.created.length)
+
+  // The plugin repository is refused: calculations belong outside it.
+  const root = resolve(import.meta.dirname, '..')
+  assert.equal(isInsideRepository(root), true)
+  assert.throws(() => initMathWorkspace(join(root, 'some-task')), /plugin repository/)
 })
 
 test('a cell that exits the kernel is reported and the next call recovers', async (t) => {

@@ -68,14 +68,19 @@
 
 ## Структура репозитория
 
-- `index.js`, `bridge.wl`, `client.js`, `kernel-discovery.js`, `test/`, `scripts/` — код плагина.
+- `index.js`, `bridge.wl`, `client.js`, `kernel-discovery.js`, `scaffold.js`, `test/`, `scripts/` —
+  код плагина.
 - `workspace/` — стартовый каталог для расчётных сессий: `AGENTS.md` (инструкции сессии),
   `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `extract-md.cmd`, шаблоны),
-  `NOTES.md`, `.gitignore`. Его копируют в новое место и работают там — расчёты в самом
-  репозитории не ведём, чтобы не смешивать код и результаты.
+  `NOTES.md`, `gitignore` (шаблон `.gitignore`; npm не пропускает файл с точкой в имени,
+  `scaffold.js` переименовывает его при копировании). Его копируют в новое место и работают
+  там — расчёты в самом репозитории не ведём, чтобы не смешивать код и результаты.
+- `scaffold.js` + `InitMath.cmd` + команда `/initmath` — подготовка такой папки одной командой;
+  папку внутри репозитория `scaffold.js` отклоняет.
 - `examples/` — готовые задачи как образцы (`bathtub-vortex`, `ode-second-order`,
   `lorenz-example`): `TASK.md`, отчёт MD/TeX, сборка DOCX/PDF, `_plots/`.
-- В npm-пакет (`files` в `package.json`) ни `workspace/`, ни `examples/` не входят.
+- В npm-пакет (`files` в `package.json`) входят `workspace/` и `scaffold.js` (нужны `/initmath`
+  в установленной копии), но не `examples/`.
 - `D:\Projects\LLM\Hardness\dsh-wolfram-nb_Priv\notes\` — приватные заметки (LEDGER, журналы
   сессий). Живут рядом с репозиторием и внутрь не переносятся: публичный checkout не должен
   получить их случайно.

@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
+import { initMathWorkspace, isInsideRepository } from './scaffold.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BRIDGE_PATH = join(HERE, 'bridge.wl')
@@ -1706,6 +1707,33 @@ export function apply(ctx, config = {}) {
         }
       },
     }), 'wolfram notebook: wolfram-open command')
+
+    ctx.effect(() => commands.register({
+      name: 'initmath',
+      description: 'Prepare a folder for Wolfram calculations (AGENTS.md, tools, NOTES)',
+      input: { hint: '[target folder; default: the session folder]' },
+      handler: async ({ agent, rawInput }) => {
+        try {
+          const context = await commandContext(agent)
+          const requested = String(rawInput ?? '').trim().replace(/^"(.*)"$/, '$1')
+          const target = requested === '' ? context.cwd : resolve(context.cwd, requested)
+          if (isInsideRepository(target)) {
+            return {
+              kind: 'error',
+              text: `${target} is the plugin repository; pass a folder outside it, e.g. /initmath "D:\\Projects\\my-math"`,
+            }
+          }
+          const result = initMathWorkspace(target)
+          const lines = [
+            `Prepared ${result.target}: ${result.created.length} file(s) written${result.skipped.length === 0 ? '' : `, ${result.skipped.length} kept (add --force to replace)`}.`,
+            'Start with: node tools/new-task.mjs <task-name>',
+          ]
+          return { kind: 'success', text: lines.join('\n') }
+        } catch (error) {
+          return { kind: 'error', text: String(error?.message ?? error) }
+        }
+      },
+    }), 'wolfram notebook: initmath command')
   }
 
   ctx.effect(() => {

@@ -62,6 +62,7 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
+| `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`) and creates `tasks\` and `data\`; refuses the plugin repository |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
 | Persistent kernel | One long-lived `math.exe` per session; variables and definitions survive across calls |
 | `.nb` export (opt-in) | Pass `exportNotebook: true` to also write the evaluation as a real Mathematica notebook file under `wolfram-notebooks/`; by default the panel renders the document and nothing is written to disk |
@@ -112,6 +113,24 @@ wolfram_notebook  action="open"  path="wolfram-notebooks/xxx.nb"
 You can also switch notebooks inside the panel: click “Open…” at the top, then pick a `.nb` from the
 list (or type a path) — the panel renders it immediately and makes it the current document.
 `/wolfram-open <path>` is the command form of the same action and produces no model message.
+
+### A calculation folder: `/initmath`
+
+Do the maths outside the plugin repository, or results end up mixed with the code. A folder can be
+prepared in three ways:
+
+- from a session: `/initmath "D:\Projects\my-math"` (no argument means the session folder);
+- from the repository: `InitMath.cmd "D:\Projects\my-math"` (double-click asks for the folder);
+- directly: `node scaffold.js "D:\Projects\my-math"`.
+
+It copies `workspace\` — `AGENTS.md` (the rules for a calculation session), `NOTES.md`, `README.md`,
+`.gitignore` and `tools\` (report build, PDF check, task scaffold) — and creates `tasks\` and
+`data\`. Existing files are kept unless `--force`, and a folder inside the plugin repository is
+refused.
+
+Next: `node tools\new-task.mjs <name>`, compute with the `wolfram_*` tools, build the report with
+`tools\build-report.cmd`, check it with `tools\pdfcheck.cmd`. Session artifacts (`wolfram-plots\`,
+`wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never to the repository.
 
 To open the panel manually: right sidebar “+” → Wolfram notebook (the panel registers a guide entry).
 
