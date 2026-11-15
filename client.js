@@ -193,6 +193,8 @@ window.__ModuleLoader__.load({
      */
     let reportState = { sessionId: '', open: false, ok: false, text: '', anchor: null }
     const reportListeners = new Set()
+    /** A click while a run is in flight is ignored, even after a re-render. */
+    let initInFlight = false
 
     function publishReport(next) {
       reportState = { ...reportState, ...next }
@@ -225,7 +227,8 @@ window.__ModuleLoader__.load({
         return () => document.removeEventListener('keydown', onKey, true)
       }, [report === null])
       const run = async () => {
-        if (busy) return
+        if (busy || initInFlight) return
+        initInFlight = true
         setBusy(true)
         try {
           const channel = commandChannel()
@@ -247,6 +250,7 @@ window.__ModuleLoader__.load({
         } catch (error) {
           publishReport({ sessionId, open: true, ok: false, text: String(error?.message ?? error), anchor: null })
         } finally {
+          initInFlight = false
           setBusy(false)
         }
       }

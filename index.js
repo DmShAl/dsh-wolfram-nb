@@ -1692,6 +1692,9 @@ export function apply(ctx, config = {}) {
 
   const commands = typeof ctx.get === 'function' ? ctx.get('commands') : undefined
   if (commands !== undefined) {
+    /** Folders with an /initmath run in flight, so a double click cannot race itself. */
+    const initInFlight = new Set()
+
     ctx.effect(() => commands.register({
       name: 'wolfram-open',
       description: 'Open a Wolfram notebook (.nb) in the Wolfram panel',
@@ -1713,6 +1716,7 @@ export function apply(ctx, config = {}) {
       description: 'Prepare a folder for Wolfram calculations (AGENTS.md, tools, NOTES, local git)',
       input: { hint: '[target folder] [--no-git]' },
       handler: async ({ agent, rawInput }) => {
+        let lockKey = null
         try {
           const context = await commandContext(agent)
           const raw = String(rawInput ?? '').trim()
@@ -1725,6 +1729,12 @@ export function apply(ctx, config = {}) {
               text: `${target} is the plugin repository; pass a folder outside it, e.g. /initmath "D:\\Projects\\my-math"`,
             }
           }
+          lockKey = resolve(target).toLowerCase()
+          if (initInFlight.has(lockKey)) {
+            return { kind: 'success', text: `${target} is already being prepared; this click was ignored.` }
+          }
+          initInFlight.add(lockKey)
+
           const result = initMathWorkspace(target)
           const env = checkEnvironment()
           const found = env.filter((item) => item.ok).length
@@ -1737,12 +1747,14 @@ export function apply(ctx, config = {}) {
           }
           if (!noGit) {
             const snapshot = initGitRepository(target)
-            lines.push(`  ${snapshot.ok ? 'OK  ' : 'MISS'}  Git           ${snapshot.detail}`)
+            lines.push(`  ${snapshot.ok ? 'OK  ' : 'MISS'}  Git repo      ${snapshot.detail}`)
           }
           lines.push('Next: node tools/new-task.mjs <task-name>')
           return { kind: found === env.length ? 'success' : 'error', text: lines.join('\n') }
         } catch (error) {
           return { kind: 'error', text: String(error?.message ?? error) }
+        } finally {
+          if (lockKey !== null) initInFlight.delete(lockKey)
         }
       },
     }), 'wolfram notebook: initmath command')

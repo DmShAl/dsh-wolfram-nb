@@ -144,6 +144,16 @@ export function checkEnvironment() {
     detail: latex ?? 'pdflatex not found (install MiKTeX or add it to PATH)',
   })
 
+  const gitVersion = spawnSync('git', ['--version'], { encoding: 'utf8', windowsHide: true })
+  const gitOk = gitVersion.error === undefined && gitVersion.status === 0
+  items.push({
+    name: 'Git',
+    ok: gitOk,
+    detail: gitOk
+      ? `${String(gitVersion.stdout ?? '').trim()}${git(['lfs', 'version'], '.').ok ? ' + git-lfs' : ''}`
+      : 'git not found (install Git for Windows)',
+  })
+
   items.push({ name: 'Node', ok: true, detail: process.execPath })
   return items
 }
@@ -170,19 +180,36 @@ function commitArgs(message, dir) {
   return [...identity, 'commit', '-q', '-m', message]
 }
 
-/** `git init` plus one commit; an existing repository is left untouched. */
+/** Report and figure formats that grow the repository quickly, so they go to LFS. */
+const LFS_PATTERNS = ['*.pdf', '*.docx', '*.png', '*.jpg', '*.jpeg', '*.xlsx', '*.svg', '*.zip']
+
+/**
+ * `git init` plus one commit; an existing repository is left untouched.
+ * Git LFS is enabled when `git lfs` is available, so reports and figures stay out
+ * of the object database.
+ */
 export function initGitRepository(dir, message = 'initmath: workspace template') {
-  if (isGitRepository(dir)) return { ok: true, created: false, detail: 'already a git repository' }
+  if (isGitRepository(dir)) return { ok: true, created: false, lfs: false, detail: 'already a git repository' }
   const init = git(['init', '-q'], dir)
-  if (!init.ok) return { ok: false, created: false, detail: init.error?.message ?? init.stderr ?? 'git init failed' }
+  if (!init.ok) return { ok: false, created: false, lfs: false, detail: init.error?.message ?? init.stderr ?? 'git init failed' }
   git(['config', 'core.autocrlf', 'false'], dir)
+
+  let lfs = false
+  if (git(['lfs', 'version'], dir).ok) {
+    lfs = git(['lfs', 'install', '--local'], dir).ok
+    if (lfs) {
+      for (const pattern of LFS_PATTERNS) git(['lfs', 'track', pattern], dir)
+    }
+  }
+
   git(['add', '-A'], dir)
   const commit = git(commitArgs(message, dir), dir)
   if (!commit.ok) {
-    return { ok: false, created: true, detail: `repository created, but the first commit failed: ${commit.stderr || commit.stdout}` }
+    return { ok: false, created: true, lfs, detail: `repository created, but the first commit failed: ${commit.stderr || commit.stdout}` }
   }
   const head = git(['rev-parse', '--short', 'HEAD'], dir)
-  return { ok: true, created: true, detail: `initialized (commit ${head.stdout || '?'})` }
+  const suffix = lfs ? 'LFS on' : 'no git-lfs: binaries go into plain git'
+  return { ok: true, created: true, lfs, detail: `initialized (commit ${head.stdout || '?'}, ${suffix})` }
 }
 
 /** Stage everything and commit it; the safety net for a session's files. */

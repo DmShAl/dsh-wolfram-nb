@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.1 — 2026-11-15
+
+### Fixed
+
+- **Double-clicking InitMath no longer races.** The chip ignores a click while a run is in flight
+  (a module-level flag, so a re-render cannot forget it), and the host keeps a per-folder lock:
+  the second call answers "already being prepared; this click was ignored".
+
+### Added
+
+- **Git LFS at init.** When `git lfs` is available, `initGitRepository` runs `git lfs install
+  --local` and tracks `*.pdf`, `*.docx`, `*.png`, `*.jpg`, `*.jpeg`, `*.xlsx`, `*.svg`, `*.zip`,
+  so reports and figures are stored as pointers; the report line says `LFS on`. Without git-lfs it
+  says `no git-lfs: binaries go into plain git` instead of silently bloating the repository.
+- **The environment check reports Git** (`git --version`, plus `+ git-lfs` when present), so a
+  machine without git is visible before the first commit fails.
+
 ## 1.8.0 — 2026-11-15
 
 ### Added

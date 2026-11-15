@@ -547,7 +547,7 @@ test('wolfram_alpha is registered', (t) => {
 test('checkEnvironment reports the components a calculation needs', (t) => {
   const items = checkEnvironment()
   const names = items.map((item) => item.name)
-  for (const expected of ['Mathematica', 'PDFConv', 'Python', 'MiKTeX', 'Node']) {
+  for (const expected of ['Mathematica', 'PDFConv', 'Python', 'MiKTeX', 'Git', 'Node']) {
     assert.ok(names.includes(expected), `missing component ${expected}`)
   }
   for (const item of items) {
