@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.3 — 2026-11-15
+
+### Fixed
+
+- **The InitMath chip now shows its report.** The inline flash lived in component state, and the
+  input bar re-renders (and re-injects the slot) while the command runs, so the result vanished
+  unseen. The report is kept outside the component now and rendered in a popover anchored above
+  the chip: full multi-line text, "Close" button and Escape to dismiss, still open after a
+  re-render.
+
+### Note
+
+- Posting the result into the conversation is not available to plugins: DSH documents that a UI
+  action calls a Host entry point through `ctx.remote.commands.execute()` and shows the returned
+  result itself, and it exposes no API to append a message to a session.
+
 ## 1.7.2 — 2026-11-15
 
 ### Added

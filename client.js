@@ -57,6 +57,7 @@ window.__ModuleLoader__.load({
       'init.done': 'Folder prepared',
       'init.failed': 'Could not prepare the folder.',
       'init.noCommand': 'This build does not expose the /initmath command channel.',
+      'init.close': 'Close',
     }
 
     const zh = {
@@ -99,6 +100,7 @@ window.__ModuleLoader__.load({
       'init.done': '目录已准备好',
       'init.failed': '无法准备目录。',
       'init.noCommand': '当前版本没有暴露 /initmath 命令通道。',
+      'init.close': '关闭',
     }
 
     const CSS = `
@@ -164,13 +166,17 @@ window.__ModuleLoader__.load({
     let commandChannel = () => undefined
 
     const CHIP_CSS = `
-.dsw-wl-chipwrap{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.dsw-wl-chipwrap{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:0}
 .dsw-wl-chip{box-sizing:border-box;display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1;cursor:pointer;transition:background-color .12s cubic-bezier(.2,.8,.2,1),border-color .12s cubic-bezier(.2,.8,.2,1)}
 .dsw-wl-chip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .dsw-wl-chip:disabled{opacity:.6;cursor:default}
-.dsw-wl-chipnote{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--dsw-alias-label-secondary)}
-.dsw-wl-chipok{color:var(--dsw-alias-state-success-primary,#2e7d32)}
-.dsw-wl-chipfail{color:var(--dsw-alias-state-error-primary,#c62828)}
+.dsw-wl-pop{position:fixed;z-index:60;box-sizing:border-box;width:min(460px,calc(100vw - 24px));max-height:min(360px,60vh);overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px;border:0;border-radius:var(--dsw-radius-lg,10px);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);box-shadow:var(--dsw-elevation-soft);font:inherit;font-size:12px}
+.dsw-wl-pophead{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:600}
+.dsw-wl-popok{color:var(--dsw-alias-state-success-primary,#2e7d32)}
+.dsw-wl-popfail{color:var(--dsw-alias-state-error-primary,#c62828)}
+.dsw-wl-popclose{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:6px}
+.dsw-wl-popclose:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.dsw-wl-popped{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--dsw-alias-label-primary)}
 `
 
     function installChipStyles() {
@@ -182,22 +188,42 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * The report outlives the component: the input bar re-renders (and the slot is
+     * re-injected) while the command runs, so component state alone lost the result.
+     */
+    let reportState = { sessionId: '', open: false, ok: false, text: '', anchor: null }
+    const reportListeners = new Set()
+
+    function publishReport(next) {
+      reportState = { ...reportState, ...next }
+      for (const listener of reportListeners) listener()
+    }
+
+    /**
      * Composer chip next to Compact: one click prepares the session folder
-     * (AGENTS.md, tools/, tasks/, data/) by running the host `/initmath` command.
+     * (AGENTS.md, tools/, tasks/, data/) and checks the environment by running
+     * the host `/initmath` command, then shows the full report in a popover.
      */
     function InitMathChip(props) {
       const t = props.t ?? ((key) => key)
+      const sessionId = String(props.sessionId ?? '')
       const [busy, setBusy] = React.useState(false)
-      const [note, setNote] = React.useState(null)
-      const timer = React.useRef(null)
-      React.useEffect(() => () => {
-        if (timer.current !== null) clearTimeout(timer.current)
+      const [, setRevision] = React.useState(0)
+      const buttonRef = React.useRef(null)
+      React.useEffect(() => {
+        const listener = () => setRevision((value) => value + 1)
+        reportListeners.add(listener)
+        return () => { reportListeners.delete(listener) }
       }, [])
-      const flash = (value) => {
-        setNote(value)
-        if (timer.current !== null) clearTimeout(timer.current)
-        timer.current = setTimeout(() => setNote(null), 6000)
-      }
+      const mine = reportState.sessionId === sessionId
+      const report = mine && reportState.open ? reportState : null
+      const close = () => publishReport({ open: false })
+      React.useEffect(() => {
+        if (report === null) return undefined
+        const onKey = (event) => { if (event.key === 'Escape') close() }
+        document.addEventListener('keydown', onKey, true)
+        return () => document.removeEventListener('keydown', onKey, true)
+      }, [report === null])
       const run = async () => {
         if (busy) return
         setBusy(true)
@@ -205,16 +231,21 @@ window.__ModuleLoader__.load({
           const channel = commandChannel()
           if (channel?.execute === undefined) throw new Error(t('init.noCommand'))
           const executed = unwrapRemote(await channel.execute(
-            String(props.sessionId ?? ''),
+            sessionId,
             INIT_COMMAND,
             [],
             new AbortController().signal,
           ))
           const outcome = executed?.result ?? executed
-          if (outcome?.kind === 'error') throw new Error(outcome.text || t('init.failed'))
-          flash({ ok: true, text: String(outcome?.text ?? t('init.done')).split('\n')[0] })
+          const ok = outcome?.kind !== 'error'
+          const text = String(outcome?.text ?? (ok ? t('init.done') : t('init.failed')))
+          const rect = buttonRef.current?.getBoundingClientRect?.() ?? null
+          const anchor = rect === null
+            ? null
+            : { left: rect.left, bottom: Math.max(8, (window.innerHeight ?? 0) - rect.top + 8) }
+          publishReport({ sessionId, open: true, ok, text, anchor })
         } catch (error) {
-          flash({ ok: false, text: String(error?.message ?? error) })
+          publishReport({ sessionId, open: true, ok: false, text: String(error?.message ?? error), anchor: null })
         } finally {
           setBusy(false)
         }
@@ -224,13 +255,24 @@ window.__ModuleLoader__.load({
           type: 'button',
           className: 'dsw-wl-chip',
           disabled: busy,
+          ref: buttonRef,
           title: t('init.title'),
           onClick: run,
         }, busy ? t('init.busy') : t('init.chip')),
-        note === null ? null : h('span', {
-          className: 'dsw-wl-chipnote' + (note.ok ? ' dsw-wl-chipok' : ' dsw-wl-chipfail'),
-          title: note.text,
-        }, note.text.length > 80 ? note.text.slice(0, 77) + '…' : note.text),
+        report === null ? null : h('div', {
+          className: 'dsw-wl-pop',
+          role: 'dialog',
+          style: report.anchor === null
+            ? { left: 16, bottom: 80 }
+            : { left: Math.max(8, Math.min(report.anchor.left, (window.innerWidth ?? 1024) - 480)), bottom: report.anchor.bottom },
+        },
+          h('div', { className: 'dsw-wl-pophead' },
+            h('span', { className: report.ok ? 'dsw-wl-popok' : 'dsw-wl-popfail' },
+              report.ok ? t('init.done') : t('init.failed')),
+            h('button', { type: 'button', className: 'dsw-wl-popclose', onClick: close }, t('init.close')),
+          ),
+          h('pre', { className: 'dsw-wl-popped' }, report.text),
+        ),
       )
     }
 
