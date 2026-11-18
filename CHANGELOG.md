@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.16.2 — 2026-11-19
+
+### Fixed
+
+- **ASCII-safe marker transport (bridge 1.3.5).** Marker payloads (`@@WB_CHECK@@`,
+  `@@WB_VERIFY@@`, `@@WB_STATE@@`, `@@WB_RENDER@@`, `@@WB_HELP@@`, `@@WB_DOCPAGE@@`,
+  `@@WB_ALPHA@@`) were printed as raw JSON to stdout. `ExportString[..., "JSON"]` maps UTF-8
+  bytes to Latin-1 characters, which `WriteString` re-encodes, so a Cyrillic identifier in a
+  `wolfram_check` message arrived as mojibake: `Unexpected letterlike character: "Ð"
+  (\:041f)` instead of `"П"`. The bridge now has `WolframBridge`jsonPayload` (base64 of the JSON
+  bytes, the same trick the document channel always used) and every marker uses it; the host
+  decodes base64 before `JSON.parse` and still accepts a raw JSON payload from an older kernel.
+  Runtime behaviour of A1–A6 (UTF-8 kernels, full job logs, `fullConsole`, `wolfram_check`
+  counters/`strict`) is unchanged.
+
+### Tests
+
+- 69 tests: a `wolfram_check` regression that requires `"П" (\:041f)` and `"ш" (\:0448)` in the
+  messages and rejects the mojibake (`"Ð"`/`"Ñ"`), with the counters unchanged.
+
 ## 1.16.1 — 2026-11-19
 
 Follow-up to the 1.16.0 acceptance (bridge stays 1.3.4; these are host-side fixes).

@@ -88,7 +88,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /bridge: 1\.3\.4/)
+  assert.match(status.summary, /bridge: 1\.3\.5/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -929,7 +929,7 @@ test('wolfram_notebook status names the running plugin version', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
   assert.match(status.summary, /Plugin \d+\.\d+\.\d+/)
-  assert.match(status.summary, /bridge: 1\.3\.4/)
+  assert.match(status.summary, /bridge: 1\.3\.5/)
 })
 
 test('wolfram_job result waits for a running job when asked', async (t) => {
@@ -1118,6 +1118,23 @@ test('wolfram_check treats a plain standalone script as clean', async (t) => {
   assert.equal(result.ok, true, result.summary)
   assert.match(result.summary, /no issues/)
   assert.doesNotMatch(result.summary, /\[TopLevelCompoundExpression\]/)
+})
+
+test('Cyrillic survives the marker transport in wolfram_check messages', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  // Marker payloads used to be printed as raw JSON: ExportString maps UTF-8 bytes to
+  // Latin-1 characters, so "П" reached the answer as "Ð". They are base64 now.
+  const identifiers = await tools.get('wolfram_check').execute({ code: 'Привет = 1', strict: true }, {})
+  assert.match(identifiers.summary, /Unexpected letterlike character/)
+  assert.match(identifiers.summary, /"П" \(\\:041f\)/)
+  assert.doesNotMatch(identifiers.summary, /"Ð"|"Ñ"/)
+  assert.match(identifiers.summary, /UnexpectedLetterlikeCharacter ×6/)
+
+  const sh = await tools.get('wolfram_check').execute({ code: 's = "ш";', strict: true }, {})
+  assert.match(sh.summary, /Non-ASCII character: ``"ш" \(\\:0448\)``/)
+  assert.doesNotMatch(sh.summary, /"Ñ|"Ð/)
 })
 
 

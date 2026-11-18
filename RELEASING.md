@@ -15,7 +15,7 @@
 ## 2. Проверка
 
 ```bat
-npm.cmd test                 :: 66 тестов против живого ядра, ~110 с
+npm.cmd test                 :: 69 тестов против живого ядра, ~125 с
 build-tgz.bat install        :: собрать и поставить в профиль desktop
 node scripts/smoke.mjs       :: 11 шагов, ~10 с
 ```
@@ -28,7 +28,7 @@ node scripts/smoke.mjs       :: 11 шагов, ~10 с
 После установки **полностью перезапустите DSH** и убедитесь, что загружена новая сборка:
 
 ```
-wolfram_notebook action="status"   →  Plugin <новая версия>, bridge 1.3.4 …
+wolfram_notebook action="status"   →  Plugin <новая версия>, bridge 1.3.5 …
 ```
 
 ## 3. Коммит и тег

@@ -21,7 +21,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
-const BRIDGE_VERSION = '1.3.4'
+const BRIDGE_VERSION = '1.3.5'
 /** The installed build, so a session can tell which version it is actually running. */
 const PLUGIN_VERSION = (() => {
   try { return String(JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version ?? 'n/a') } catch { return 'n/a' }
@@ -123,8 +123,13 @@ function parseMarker(console, marker) {
     }
     const at = text.indexOf(marker)
     if (at < 0) continue
+    const payload = text.slice(at + marker.length).trim()
+    // Since bridge 1.3.5 payloads are base64 of UTF-8 JSON: printing JSON raw mangled
+    // any non-ASCII (ExportString maps UTF-8 bytes to Latin-1 characters). A raw payload
+    // from an older kernel still starts with "{", so both forms are accepted.
+    const jsonText = payload.startsWith('{') ? payload : Buffer.from(payload, 'base64').toString('utf8')
     try {
-      return JSON.parse(text.slice(at + marker.length))
+      return JSON.parse(jsonText)
     } catch {
       return null
     }
@@ -1353,7 +1358,7 @@ export function apply(ctx, config = {}) {
     If[finite === {},
       Print["${VERIFY_MARKER}" <> "{\\"status\\":\\"inconclusive\\",\\"ok\\":false}"],
       maxErr = Max[Abs[finite]];
-      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]]
+      Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>]]
     ]
   ];
 ];`
@@ -1383,16 +1388,16 @@ export function apply(ctx, config = {}) {
   condResiduals = Quiet@Check[FullSimplify[# /. Equal -> Subtract /. rules, ass] & /@ conds, $Failed];
   symbolic = residual === 0 && (condResiduals === {} || (ListQ[condResiduals] && AllTrue[condResiduals, # === 0 &]));
   If[symbolic,
-    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0, "conditions" -> Length[conds]|>, "JSON"], "\\n" -> ""]],
+    Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0, "conditions" -> Length[conds]|>]],
     If[condResiduals === $Failed,
-      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False, "reason" -> "conditions"|>, "JSON"], "\\n" -> ""]],
+      Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "inconclusive", "ok" -> False, "reason" -> "conditions"|>]],
       vals = Table[Quiet@Check[N[residual /. var -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
       finite = Select[vals, NumericQ[#] && NumberQ[#] &];
       condValues = Quiet@Check[N[condResiduals], {}];
       If[finite === {} || (conds =!= {} && ! AllTrue[condValues, NumericQ[#] && NumberQ[#] &]),
-        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]],
+        Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "inconclusive", "ok" -> False|>]],
         maxErr = Max[Abs[finite]];
-        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "numerically_consistent", "falsified"], "ok" -> maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "maxError" -> maxErr, "samples" -> Length[finite], "conditions" -> Length[conds]|>, "JSON"], "\\n" -> ""]]
+        Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> If[maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "numerically_consistent", "falsified"], "ok" -> maxErr < tol && AllTrue[condValues, TrueQ[Abs[#] < tol] &], "maxError" -> maxErr, "samples" -> Length[finite], "conditions" -> Length[conds]|>]]
       ]
     ]
   ];
@@ -1413,15 +1418,15 @@ export function apply(ctx, config = {}) {
         const code = `Module[{integral = ${integral}, claimed = ${result}, ass = ${assumptions}, tol = ${wlReal(tolerance)}, diff, numericDiff},
   diff = TimeConstrained[Quiet@Check[FullSimplify[integral - claimed, ass], $Failed], 30, $Failed];
   If[diff === 0,
-    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True|>, "JSON"], "\\n" -> ""]],
+    Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "verified_symbolic", "ok" -> True|>]],
     numericDiff = Quiet@Check[N[Abs[integral - claimed]], Indeterminate];
     Which[
       NumberQ[numericDiff] && TrueQ[numericDiff < tol],
-        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "numerically_consistent", "ok" -> True, "difference" -> numericDiff|>, "JSON"], "\\n" -> ""]],
+        Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "numerically_consistent", "ok" -> True, "difference" -> numericDiff|>]],
       NumberQ[numericDiff],
-        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "falsified", "ok" -> False, "difference" -> numericDiff|>, "JSON"], "\\n" -> ""]],
+        Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "falsified", "ok" -> False, "difference" -> numericDiff|>]],
       True,
-        Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]]
+        Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "inconclusive", "ok" -> False|>]]
     ]
   ];
 ];`
@@ -1443,13 +1448,13 @@ export function apply(ctx, config = {}) {
         const code = `Module[{integrand = ${integrand}, candidate = ${result}, ass = ${assumptions}, var = Symbol[${wlString(sym)}], lo = ${lo}, hi = ${hi}, n = ${samples}, tol = ${wlReal(tolerance)}, diff, values, finite, maxErr},
   diff = TimeConstrained[Quiet@Check[FullSimplify[D[candidate, var] - integrand, ass], $Failed], 30, $Failed];
   If[diff === 0,
-    Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0|>, "JSON"], "\\n" -> ""]],
+    Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "verified_symbolic", "ok" -> True, "maxError" -> 0|>]],
     values = Table[Quiet@Check[N[diff /. var -> (lo + (hi - lo) i/n)], Indeterminate], {i, 0, n}];
     finite = Select[values, NumericQ[#] && NumberQ[#] &];
     If[finite === {},
-      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> "inconclusive", "ok" -> False|>, "JSON"], "\\n" -> ""]],
+      Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "inconclusive", "ok" -> False|>]],
       maxErr = Max[Abs[finite]];
-      Print["${VERIFY_MARKER}" <> StringReplace[ExportString[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>, "JSON"], "\\n" -> ""]]
+      Print["${VERIFY_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> If[maxErr < tol, "numerically_consistent", "falsified"], "ok" -> maxErr < tol, "maxError" -> maxErr, "samples" -> Length[finite]|>]]
     ]
   ];
 ];`
@@ -1527,8 +1532,8 @@ export function apply(ctx, config = {}) {
       Quiet@Check[WolframAlpha[q, "PodPlaintext"], $Failed]]];
   rendered = If[ListQ[result], StringRiffle[Flatten[Map[If[StringQ[#], #, ToString[#, InputForm]] &, result]], "\\n\\n"], ToString[result, InputForm]];
   If[result === $Failed || rendered === "$Failed",
-    Print["${ALPHA_MARKER}" <> StringReplace[ExportString[<|"status" -> "error", "steps" -> hasSteps, "message" -> "Wolfram|Alpha could not answer. Check internet access and the query."|>, "JSON"], "\\n" -> ""]],
-    Print["${ALPHA_MARKER}" <> StringReplace[ExportString[<|"status" -> "ok", "steps" -> hasSteps, "codes" -> ToCharacterCode[rendered]|>, "JSON"], "\\n" -> ""]]
+    Print["${ALPHA_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "error", "steps" -> hasSteps, "message" -> "Wolfram|Alpha could not answer. Check internet access and the query."|>]],
+    Print["${ALPHA_MARKER}" <> WolframBridge\`jsonPayload[<|"status" -> "ok", "steps" -> hasSteps, "codes" -> ToCharacterCode[rendered]|>]]
   ]
 ]`
       const payload = await evaluateMarked(context, code, ALPHA_MARKER)
@@ -1592,11 +1597,11 @@ export function apply(ctx, config = {}) {
       const action = String(args?.action ?? '')
       if (action === 'status') {
         const code = `Module[{},
-  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True,
+  Print["${STATE_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> True,
     "symbols" -> Length[Names["Global\`*"]],
     "memoryMB" -> N[MemoryInUse[]/1048576.],
     "assumptions" -> ToString[$Assumptions, InputForm],
-    "packages" -> Length[$Packages]|>, "JSON"], "\\n" -> ""]];
+    "packages" -> Length[$Packages]|>]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
         const assumptions = payload.assumptions === 'True' ? 'none' : String(payload.assumptions)
@@ -1611,8 +1616,8 @@ export function apply(ctx, config = {}) {
         const code = `Module[{names = Select[Names[${wlString(pattern)}],
     StringFreeQ[#, "$"] && (ToExpression[#, InputForm, Hold] /. Hold[s_] :>
       (Length[OwnValues[s]] + Length[DownValues[s]] + Length[UpValues[s]] + Length[SubValues[s]] > 0)) &]},
-  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "count" -> Length[names],
-    "names" -> Take[names, UpTo[${limit}]]|>, "JSON"], "\\n" -> ""]];
+  Print["${STATE_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> True, "count" -> Length[names],
+    "names" -> Take[names, UpTo[${limit}]]|>]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
         const names = Array.isArray(payload.names) ? payload.names : []
@@ -1632,7 +1637,7 @@ export function apply(ctx, config = {}) {
         const code = `Module[{file = ${wlPath}, ok = False, bytes = 0},
   Quiet@Check[DumpSave[file, "Global\`"]; ok = FileExistsQ[file], ok = False];
   bytes = If[ok, FileByteCount[file], 0];
-  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>, "JSON"], "\\n" -> ""]];
+  Print["${STATE_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
         const ok = payload.ok === true
@@ -1660,7 +1665,7 @@ export function apply(ctx, config = {}) {
         const code = `Module[{file = ${wlPath}, exists, res = $Failed},
   exists = FileExistsQ[file];
   If[exists, res = Quiet@Get[file]];
-  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> (exists && res =!= $Failed), "exists" -> exists, "path" -> file, "result" -> ToString[InputForm[res]]|>, "JSON"], "\\n" -> ""]];
+  Print["${STATE_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> (exists && res =!= $Failed), "exists" -> exists, "path" -> file, "result" -> ToString[InputForm[res]]|>]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
         const ok = payload.ok === true
@@ -1676,7 +1681,7 @@ export function apply(ctx, config = {}) {
         const code = `Module[{names},
   names = Select[Names["Global\`*"], StringFreeQ[#, "$"] &];
   Quiet@(ClearAll /@ names);
-  Print["${STATE_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "cleared" -> Length[names]|>, "JSON"], "\\n" -> ""]];
+  Print["${STATE_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> True, "cleared" -> Length[names]|>]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
         return { ok: payload.ok === true, summary: `Cleared ${payload.cleared} Global symbol(s) (names without "$").` }
@@ -1727,7 +1732,7 @@ export function apply(ctx, config = {}) {
   Quiet@Check[Export[file, img, ImageResolution -> res], Null];
   bytes = If[FileExistsQ[file], FileByteCount[file], 0];
   ok = bytes > 0;
-  Print["${RENDER_MARKER}" <> StringReplace[ExportString[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>, "JSON"], "\\n" -> ""]];
+  Print["${RENDER_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> ok, "path" -> file, "bytes" -> bytes|>]];
 ];`
       const payload = await evaluateMarked(context, code, RENDER_MARKER, maTeXPrelude)
       const ok = payload.ok === true
@@ -1903,8 +1908,8 @@ export function apply(ctx, config = {}) {
         <|"tag" -> o[[1]], "severity" -> o[[3]], "message" -> o[[2]],
           "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[2000]]];
     tags = Map[{#[[1]], #[[2]]} &, Tally[Map[#[[1]] &, res]]];
-    Print["${CHECK_MARKER}" <> StringReplace[ExportString[
-      <|"ok" -> True, "count" -> Length[res], "findings" -> findings, "tags" -> tags|>, "JSON"], "\\n" -> ""]]]
+    Print["${CHECK_MARKER}" <> WolframBridge\`jsonPayload[
+      <|"ok" -> True, "count" -> Length[res], "findings" -> findings, "tags" -> tags|>]]]
   ]`
       const payload = await evaluateMarked(context, cell, CHECK_MARKER, 'Needs["CodeInspector`"];')
       if (payload.ok !== true) {
@@ -1985,7 +1990,7 @@ export function apply(ctx, config = {}) {
   sorted = SortBy[names, {StringLength[#], #} &];
   If[MemberQ[sorted, q], sorted = Prepend[DeleteCases[sorted, q], q]];
   pick = Take[sorted, UpTo[${limit}]];
-  Print["${HELP_MARKER}" <> StringReplace[ExportString[<|
+  Print["${HELP_MARKER}" <> WolframBridge\`jsonPayload[<|
     "ok" -> True, "total" -> Length[names],
     "items" -> Map[Function[n,
       Module[{sym = Quiet@Check[ToExpression[n], $Failed], u},
@@ -1998,7 +2003,7 @@ export function apply(ctx, config = {}) {
           "options" -> If[sym === $Failed, {},
             Map[ToString[#[[1]]] <> " -> " <> StringTake[ToString[#[[2]], InputForm], UpTo[60]] &,
               Take[Options[Evaluate[sym]], UpTo[12]]]]|>]],
-      pick]|>, "JSON"], "\\n" -> ""]]
+      pick]|>]]
   ]`
       const usagePrelude = `Get[${wlString(join(HERE, 'usage.wl').replace(/\\/g, '/'))}];`
       const payload = await evaluateMarked(context, cell, HELP_MARKER, usagePrelude)
@@ -2132,9 +2137,9 @@ export function apply(ctx, config = {}) {
   failed = Count[cells, Fail[_] | $Failed];
   cells = Select[cells, StringQ[#] && StringTrim[#] =!= "" &];
   text = wuAscii[StringJoin[Riffle[cells, " "]]];
-  Print["${DOC_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "symbol" -> ${wlString(symbol)},
+  Print["${DOC_MARKER}" <> WolframBridge\`jsonPayload[<|"ok" -> True, "symbol" -> ${wlString(symbol)},
     "cells" -> Length[cells], "failed" -> failed,
-    "text" -> StringTake[text, UpTo[${DOC_TEXT_LIMIT}]]|>, "JSON"], "\\n" -> ""]]
+    "text" -> StringTake[text, UpTo[${DOC_TEXT_LIMIT}]]|>]]
   ]`
       const usagePrelude = `Get[${wlString(join(HERE, 'usage.wl').replace(/\\/g, '/'))}];`
       const payload = await evaluateMarked(context, cell, DOC_MARKER, usagePrelude)

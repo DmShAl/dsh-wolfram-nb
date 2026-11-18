@@ -7,7 +7,7 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.3.4";
+WolframBridge`$version = "1.3.5";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
 (* MathML/TeX conversion goes through LibraryLink, does not respond to Abort, and
@@ -42,6 +42,13 @@ WolframBridge`decode[text_String] := ByteArrayToString[BaseDecode[text], "UTF-8"
 WolframBridge`encode[text_String] := BaseEncode[StringToByteArray[text, "ISO8859-1"]];
 
 WolframBridge`toJson[value_] := ExportString[value, "JSON"];
+
+(* Marker payloads are printed to stdout raw, and ExportString["JSON"] maps UTF-8 bytes to
+   Latin-1 characters, which WriteString then re-encodes: Cyrillic in a CodeInspector message
+   reached the host as mojibake ("П" became "Ð"). Base64 of those bytes is pure ASCII and
+   survives the console unchanged; the host decodes it as UTF-8 before parsing the JSON. The
+   document channel (encode/publish) has always used the same trick. *)
+WolframBridge`jsonPayload[value_] := WolframBridge`encode[WolframBridge`toJson[value]];
 
 WolframBridge`send[tag_String, id_String, payload_String] :=
   WriteString["stdout", tag, id, "@@", payload, "\n"];
