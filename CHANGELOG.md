@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.11.1 — 2026-11-18
+
+### Fixed
+
+- **`wolfram_help` picked the wrong symbol.** The sort key was written
+  `SortBy[names, {StringLength, #} &]`, where `StringLength` is a symbol rather than a call, so
+  the first element of the key never varied and the list fell back to alphabetical order: `Plot`
+  resolved to `AbsArgPlot`, `Integrate` to `AsymptoticIntegrate`. The key is
+  `{StringLength[#], #} &` and an exact name match is moved to the front.
+- **Ellipsis and math symbols survived.** `wuAscii` compared literal `…`, `∈`, `∫` from the source
+  file, whose encoding is not guaranteed; the rules never matched and the fallback dropped the
+  characters. The map now uses `\:XXXX` escapes, so `{f_1,f_2,...}`, `{x} in reg` and `Integral f
+  d x` come out right.
+
 ## 1.11.0 — 2026-11-18
 
 ### Added

@@ -84,11 +84,17 @@ wuIsland[body_String] := Module[{inner, held, result},
 ];
 
 (* The bridge writes JSON to stdout; a non-ASCII character is escaped by the
-   kernel as \[Name]/\\ddd, which is not valid JSON. Transliterate what usage
-   messages actually use and drop the rest. *)
+   kernel as \[Name]/\\ddd, which is not valid JSON. Transliterate by character
+   code (escapes, not literals: the source file encoding is not guaranteed) and
+   drop whatever is left. *)
 wuAscii[s_String] := StringReplace[s, Join[
-  Thread[{"…", "∫", "∈", "≤", "≥", "→", "≠", "×", "−", "–", "—", "∂", "∞", "≈"} ->
-         {"...", "Integral ", " in ", "<=", ">=", "->", "!=", "x", "-", "-", "-", "d", "Infinity", "~"}],
+  Thread[{
+    "\:2026", "\:22ef", "\:22ee", "\:22f0", "\:22f1", "\:2024", "\:2025",
+    "\:222b", "\:2208", "\:2264", "\:2265", "\:2192", "\:2260", "\:00d7",
+    "\:2212", "\:2013", "\:2014", "\:2202", "\:221e", "\:2248", "\:2200"} ->
+   {"...", "...", "...", "...", "...", "...", "...",
+    "Integral ", " in ", "<=", ">=", "->", "!=", "x",
+    "-", "-", "-", "d", "Infinity", "~", "for all "}],
   {RegularExpression["[^\\x00-\\x7F]"] -> ""}
 ]];
 

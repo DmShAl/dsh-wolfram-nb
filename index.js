@@ -1754,9 +1754,11 @@ export function apply(ctx, config = {}) {
       const query = String(args?.query ?? '').trim()
       if (query === '') throw new Error('wolfram_help needs `query`.')
       const limit = Math.max(1, Math.min(12, Math.floor(Number(args?.limit) || 5)))
-      const cell = `Module[{q = ${wlString(query)}, names, pick},
-  names = SortBy[Select[Names["*" <> q <> "*"], StringLength[#] < 48 &], {StringLength, #} &];
-  pick = Take[names, UpTo[${limit}]];
+      const cell = `Module[{q = ${wlString(query)}, names, pick, sorted},
+  names = Select[Names["*" <> q <> "*"], StringLength[#] < 48 &];
+  sorted = SortBy[names, {StringLength[#], #} &];
+  If[MemberQ[sorted, q], sorted = Prepend[DeleteCases[sorted, q], q]];
+  pick = Take[sorted, UpTo[${limit}]];
   Print["${HELP_MARKER}" <> StringReplace[ExportString[<|
     "ok" -> True, "total" -> Length[names],
     "items" -> Map[Function[n,
