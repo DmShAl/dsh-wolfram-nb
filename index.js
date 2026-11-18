@@ -6,7 +6,7 @@
  * a JSON notebook document the Client panel renders.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
@@ -1794,6 +1794,89 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  /** Local per-user Mathematica documentation: ...\Documentation.en-us\<version>\Documentation\English */
+  const documentationRoots = () => {
+    const roots = []
+    const local = process.env.LOCALAPPDATA
+    if (typeof local === 'string' && local !== '') {
+      const base = join(local, 'Programs', 'Common', 'Wolfram Research', 'Documentation.en-us')
+      try {
+        for (const version of readdirSync(base)) {
+          roots.push(join(base, version, 'Documentation', 'English'))
+        }
+      } catch { /* documentation is not installed per user */ }
+    }
+    return roots
+  }
+
+  const referencePagePath = (symbol) => {
+    for (const root of documentationRoots()) {
+      const page = join(root, 'System', 'ReferencePages', 'Symbols', `${symbol}.nb`)
+      if (existsSync(page)) return page
+    }
+    return null
+  }
+
+  const DOC_MARKER = '@@WB_DOCPAGE@@'
+  const wolframDoc = {
+    name: 'wolfram_doc',
+    description: [
+      'Read the local Mathematica reference page of a symbol (the "Details" notes, not just the usage line).',
+      'Everything comes from the installed documentation on disk, so it works offline and matches this version.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Exact symbol name, e.g. "Plot" or "Dataset".' },
+        maxChars: { type: 'number', description: 'Maximum characters of text to return (default 1200).' },
+      },
+      required: ['symbol'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, symbol: { type: 'string' }, summary: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const symbol = String(args?.symbol ?? '').trim()
+      if (symbol === '') throw new Error('wolfram_doc needs `symbol`.')
+      const maxChars = Math.max(200, Math.min(6000, Math.floor(Number(args?.maxChars) || 1200)))
+      const page = referencePagePath(symbol)
+      if (page === null) {
+        return {
+          ok: false,
+          symbol,
+          summary: `${symbol}: no reference page found under ${join('%LOCALAPPDATA%', 'Programs', 'Common', 'Wolfram Research', 'Documentation.en-us')}`,
+        }
+      }
+      const cell = `Module[{nb = Quiet@Check[Import[${wlString(page.replace(/\\/g, '/'))}], $Failed], cells, text},
+  cells = If[Head[nb] === Notebook,
+    Cases[nb, Cell[bd_, "Notes", ___] :> Quiet@Check[Catch[wuFlat[bd], "usage"], ""], Infinity],
+    {}];
+  cells = Select[cells, StringQ[#] && StringTrim[#] =!= "" &];
+  text = wuAscii[StringJoin[Riffle[cells, " "]]];
+  Print["${DOC_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "symbol" -> ${wlString(symbol)},
+    "cells" -> Length[cells], "text" -> StringTake[text, UpTo[${maxChars}]]|>, "JSON"], "\\n" -> ""]]
+  ]`
+      const usagePrelude = `Get[${wlString(join(HERE, 'usage.wl').replace(/\\/g, '/'))}];`
+      const payload = await evaluateMarked(context, cell, DOC_MARKER, usagePrelude)
+      if (payload.ok !== true) {
+        return { ok: false, symbol, summary: `${symbol}: ${payload.error ?? 'no documentation'}` }
+      }
+      const text = String(payload.text ?? '').trim()
+      return {
+        ok: text !== '',
+        symbol,
+        summary: text === ''
+          ? `${symbol}: the reference page has no details section.`
+          : `${symbol} — details (${text.length} chars):\n${text}`,
+      }
+    },
+  }
+
   const wolframReady = {
     name: 'wolfram_ready',
     description: [
@@ -1851,6 +1934,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(wolframReady), 'wolfram notebook: wolfram_ready tool')
   ctx.effect(() => ctx.tools.register(wolframCheck), 'wolfram notebook: wolfram_check tool')
   ctx.effect(() => ctx.tools.register(wolframHelp), 'wolfram notebook: wolfram_help tool')
+  ctx.effect(() => ctx.tools.register(wolframDoc), 'wolfram notebook: wolfram_doc tool')
 
   ctx.effect(() => () => {
     for (const job of jobs.values()) {

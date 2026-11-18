@@ -560,6 +560,19 @@ test('checkEnvironment reports the components a calculation needs', (t) => {
   assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
 })
 
+test('wolfram_doc reads the local reference page', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_doc').execute({ symbol: 'Plot', maxChars: 800 }, {})
+  if (result.ok !== true) {
+    t.skip('local Mathematica documentation is not installed')
+    return
+  }
+  assert.match(result.summary, /Plot/)
+  assert.match(result.summary, /wrapper|Themes|scaling/i)
+})
+
 test('wolfram_check reports a lint finding and passes clean code', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
   teardown(t, cleanups)

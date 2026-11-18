@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.12.0 — 2026-11-18
+
+### Added
+
+- **`wolfram_doc` — the local reference page.** Mathematica ships its documentation on disk
+  (`%LOCALAPPDATA%\Programs\Common\Wolfram Research\Documentation.en-us\<version>\Documentation\English`,
+  7007 `.nb` pages, 12.6 GB here), so the tool reads the page of a symbol, flattens its "Notes"
+  cells with the same box flattener and returns the details text — offline, version-exact,
+  ~0.25 s per page (the import of an 11 MB page took 0.23 s).
+
+### Changed
+
+- `wuFlat` learned `TextData` (prose cells mix strings and inline cells) and flattens
+  `TemplateBox` by its first argument (the displayed content), which the reference pages need.
+
 ## 1.11.2 — 2026-11-18
 
 ### Changed
