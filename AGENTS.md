@@ -7,14 +7,15 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.15.0** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.16.0** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin remove` + `add file:<tgz>` (сначала удаление: pnpm иначе оставляет файлы
   прежней сборки с тем же номером версии). Подробности в `INSTALL.md`.
-- Тесты: `npm test` (node --test, живое ядро, 61 тест, ~106 с); приёмка установленной
-  сборки — `node scripts/smoke.mjs` (11 шагов, ~10 с). `npm.cmd` доступен
+- Тесты: `npm test` (node --test, живое ядро, 66 тестов, ~110 с); приёмка установленной
+  сборки — `node scripts/smoke.mjs` (14 шагов, ~12 с). `npm.cmd` доступен
   (`C:\Program Files\nodejs`), Node v24.21.0.
+- Ядра стартуют в UTF-8 (`bridge.wl`, переопределяется `DSH_WOLFRAM_CHARACTER_ENCODING`).
 - Документация: `README.md` — русский (основной), `README.en.md` — английский,
   `README.zh.md` — архивный текст upstream. Язык интерфейса плагина берётся из настроек DSH
   (словари `en`/`ru`/`zh` в `client.js`, метаданные в `locale/*.json`).

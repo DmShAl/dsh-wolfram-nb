@@ -30,16 +30,16 @@
 | `data\` | общие входные данные |
 | `wolfram-plots\` | сессионные графики (в git не коммитятся) |
 | `wolfram-notebooks\` | `.nb`, только при `exportNotebook: true` |
-| `.dsh-wolfram\` | служебное: `latest.json`, временные файлы, сохранения состояния |
+| `.dsh-wolfram\` | служебное: `latest.json`, `tmp/` (временные файлы и `last-console.log`), `jobs/<id>.log`, `batch/`, сохранения состояния |
 
 ## Инструменты
 
 | Инструмент | Назначение |
 |---|---|
-| `wolfram_eval` | постоянное ядро: вычисления, серии ячеек |
+| `wolfram_eval` | постоянное ядро: вычисления, серии ячеек; длинный console сокращается, полный текст — `.dsh-wolfram/tmp/last-console.log` или `fullConsole: true` |
 | `wolfram_alpha` | Wolfram\|Alpha, пошаговые решения |
-| `wolfram_job` | долгие вычисления в фоне (submit/status/result/cancel/list; 30 мин по умолчанию) |
-| `wolfram_batch` | независимые прогоны в отдельных ядрах (`maxParallel`) |
+| `wolfram_job` | долгие вычисления в фоне (submit/status/result/cancel/log/list; 30 мин по умолчанию); `result` с `wait` ждёт завершения, `full: true` — весь console; полный лог задачи всегда в `.dsh-wolfram/jobs/<id>.log`, читается `action="log"` |
+| `wolfram_batch` | независимые прогоны в отдельных ядрах (`maxParallel`); лог каждого элемента — в `.dsh-wolfram/batch/` |
 | `wolfram_verify` | проверка результата: identity/ode/integral/antiderivative, статусы |
 | `wolfram_render` | рисунок в файл: PNG/SVG/PDF/JPG, MaTeX подгружается сам |
 | `wolfram_state` | состояние ядра: status/symbols/save/load/clear |
@@ -47,7 +47,7 @@
 | `pdfconv_convert` | `.md`/`.tex` → `pdf`+`docx`, `.docx` → `md`; существующие файлы не перезаписывает без `overwrite: true` |
 | `pdfconv_check` | окружение PDFConv: Pandoc, MiKTeX, пакеты LaTeX, шрифты, пробная сборка |
 | `wolfram_ready` | готов ли каталог: `AGENTS.md`/`tools`, компоненты, git |
-| `wolfram_check` | статическая проверка кода до запуска (CodeInspector): синтаксис и подозрительные места, код не вычисляется |
+| `wolfram_check` | статическая проверка кода до запуска (CodeInspector): синтаксис и подозрительные места, код не вычисляется; в режиме скрипта скрывает шум `SuspiciousSessionSymbol`/`NonASCIICharacter`, `strict: true` — всё |
 | `wolfram_help` | символы: текст справки, `ArgumentsPattern`, опции с умолчаниями — вместо угадывания имён |
 | `wolfram_doc` | раздел «Details» локальной страницы справки — офлайн, без сети |
 
@@ -66,7 +66,14 @@
 ## Правила работы
 
 - `Needs[...]` — в отдельной ячейке от кода, иначе символы уходят в `Global``.
+- **Кодировка штатно UTF-8.** Все ядра (сессия, задача, batch, verify) стартуют с
+  `$CharacterEncoding = "UTF-8"`, поэтому `Get["code.wl"]` читает UTF-8 без BOM, кириллица в
+  `Print` приходит без искажений, а подписи на рисунках из `wolfram_job` остаются читаемыми.
+  `Block[{$CharacterEncoding = "UTF-8"}, ...]` и пересохранение файлов с BOM больше не нужны.
+  Если задача требует другую кодировку, её задают переменной окружения
+  `DSH_WOLFRAM_CHARACTER_ENCODING` до старта DSH.
 - Долгие расчёты — `wolfram_job` (30 мин) или `wolfram_batch` для независимых прогонов.
+  Полный console задачи доступен в `wolfram_job action="log"` и в `.dsh-wolfram/jobs/<id>.log`.
 - Результат после `Integrate`/`Solve`/`DSolve` проверять через `wolfram_verify`; численную
   проверку не выдавать за доказательство.
 - Промежуточные определения сохранять `wolfram_state save` перед паузами.
@@ -97,7 +104,7 @@
    Существующие результаты по умолчанию не перезаписываются — нужен `overwrite: true`.
 3. Проверка: `tools\pdfcheck.cmd report.pdf --pages 1,3 --out _work` — страницы, объём
    текста, число кириллических символов, первые строки и рендер страниц в PNG
-   (консоль переключается в UTF-8, иначе кириллица — кракозябры).
+   (`pdfcheck.cmd` сам переключает консоль в UTF-8, чтобы кириллица не превращалась в кракозябры).
 
 Обратное направление — DOCX → Markdown с формулами: `pdfconv_convert` с `formats: ["md"]`
 или `tools\extract-md.cmd [--force] <файл.docx>`. MathType-формулы перед извлечением

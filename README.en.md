@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.15.0, bridge 1.3.3):
+This fork is built and installed locally (version 1.16.0, bridge 1.3.4):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,8 +32,8 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.15.0, bridge: 1.3.3`) or `node scripts/smoke.mjs`
-(11/11).
+`wolfram_notebook action="status"` (`Plugin 1.16.0, bridge: 1.3.4`) or `node scripts/smoke.mjs`
+(14/14).
 
 **From a clone:** install the clone directory as a bundle with
 `plugin_manager install_bundle target=<absolute path to the clone>`. The npm package
@@ -50,16 +50,16 @@ The release flow for this fork (version bump, tests, build, tag, push) is docume
 
 | Capability | Detail |
 |---|---|
-| `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more |
+| `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more. A long console is cut at 1500 characters and kept whole in `.dsh-wolfram/tmp/last-console.log`; `fullConsole: true` returns it in full |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
-| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, `status` shows the latest `Print` output, `result` accepts `wait` (up to 300 s) to block until the job finishes, and graphics results are published to the panel |
+| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`log`/`list` manage jobs, `status` shows the latest `Print` output, `result` accepts `wait` (up to 300 s) and `full: true` (whole console), `action="log"` reads the log. Every finished job always writes `.dsh-wolfram/jobs/<id>.log` and the path is in the summary; graphics results are published to the panel |
 | `wolfram_verify` | Independent checks in a throwaway kernel (session definitions cannot skew them): `identity` proves `FullSimplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` simplifies the residual and checks optional initial/boundary `conditions`; `integral` compares with its closed form; `antiderivative` differentiates the claimed antiderivative. Each result carries `status`: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
 | `wolfram_alpha` | Asks Wolfram|Alpha a natural-language query and returns the answer; with `steps` (default `true`) it requests the step-by-step solution when the service offers one and falls back to the plain answer otherwise; `maxChars` (default 4000) caps the answer and says when it was clipped. Requires internet access |
 | `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context (load defaults to the newest save); `clear` drops it |
 | `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory, auto-loading MaTeX when the expression uses it |
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | `wolfram_ready` | Reports whether the folder can take a task: `AGENTS.md`/`tools` (naming what is missing), the toolchain, and the git repository state; the plugin repository is reported as not a calculation folder |
-| `wolfram_check` | Static inspection with CodeInspector before running: syntax errors and suspicious constructs with line numbers; accepts inline `code` or a `path` to a file. The code is never evaluated |
+| `wolfram_check` | Static inspection with CodeInspector before running: syntax errors and suspicious constructs with line numbers; accepts inline `code` or a `path` to a file. Script mode hides `SuspiciousSessionSymbol` and `NonASCIICharacter` noise (Print/Set/Clear and Cyrillic text in a standalone script), shows per-tag counters and how many were hidden; `strict: true` returns everything. The code is never evaluated |
 | `wolfram_help` | Symbol lookup in the running kernel: matches, readable usage text (box islands flattened without a front end), `SyntaxInformation` (`ArgumentsPattern`), attributes and the real option names with defaults; the exact match keeps the full block, neighbours stay one line, `options: false` drops the option list |
 | `wolfram_doc` | Reads the local reference page of a symbol (the "Details" notes) from the installed documentation — offline and version-exact; the page is cached per symbol and every `ReferencePages` section is searched |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
@@ -219,8 +219,19 @@ makes troubleshooting straightforward.
 ## Data locations
 
 - `.dsh-wolfram/latest.json` — the document the panel renders (workspace, per session)
-- `.dsh-wolfram/tmp/` — kernel request/response scratch files
+- `.dsh-wolfram/tmp/` — kernel request/response scratch files, plus `last-console.log` with the
+  whole console of the last long `wolfram_eval`
+- `.dsh-wolfram/jobs/<id>.log` — the complete console of every finished `wolfram_job`
+- `.dsh-wolfram/batch/<run>/item-<n>.log` — the console of each `wolfram_batch` item
 - `wolfram-notebooks/*.nb` — exported Mathematica notebooks (written only with `exportNotebook: true`)
+
+## Encoding
+
+Every kernel (session, job, batch, verify) starts with `bridge.wl`, which sets
+`$CharacterEncoding = "UTF-8"` and the `$Output` encoding. A plain `Get` therefore reads a UTF-8
+`.wl` without BOM, Cyrillic `Print` reaches the result intact, and labels on figures exported by a
+job stay readable. Override with `DSH_WOLFRAM_CHARACTER_ENCODING` (for example `WindowsCyrillic`
+for legacy files without an explicit encoding); the default is always UTF-8.
 
 ## Known limitations
 
@@ -230,6 +241,7 @@ makes troubleshooting straightforward.
 - Sessions sharing one workspace share `latest.json` (kernels stay per-session).
 - After a page load, the first auto-reveal of the right sidebar needs one user gesture (or click “+” → Wolfram notebook); every later evaluation reveals and focuses the panel automatically.
 - **Notebooks exported by early versions cannot be recovered**: the first implementation used `MakeBoxes` inside a `Module`, so output cells were written as `value$…` placeholders (`$` is part of the variable name, so the original value cannot be reconstructed). Recompute to generate a new notebook; the current version uses `ToBoxes` and is correct.
+- With `strict: true`, CodeInspector's `NonASCIICharacter` message shows the character itself mangled (`"Ñˆ"` instead of `"ш"`); the code point in the message (`(\:0448)`) is correct. These remarks are hidden by default.
 
 ## Fix history
 
@@ -257,7 +269,7 @@ reload the plugin (in this repository that is done by toggling its enabled state
 
 Tests and checks:
 
-- `npm test` — 59 cases against the real kernel, about 106 s.
+- `npm test` — 66 cases against the real kernel, about 110 s.
 - `node scripts/smoke.mjs` — boots the plugin and calls every tool once (~10 s); use it to accept a
   build after installing. `--with-alpha` adds the Wolfram|Alpha call (needs a network).
 - `build-tgz.bat` validates that `package.json` is clean UTF-8 JSON before packing: PowerShell's

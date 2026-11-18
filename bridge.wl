@@ -7,7 +7,7 @@
      @@WB_DOC@@<id>@@<base64 of UTF-8 JSON document>
 *)
 
-WolframBridge`$version = "1.3.3";
+WolframBridge`$version = "1.3.4";
 WolframBridge`$timedOut = WolframBridge`TimedOut;
 WolframBridge`$maxInputForm = 40000;
 (* MathML/TeX conversion goes through LibraryLink, does not respond to Abort, and
@@ -20,6 +20,19 @@ WolframBridge`$maxTypesetDepth = 64;
 WolframBridge`$maxInputFormBytes = 4000000;
 WolframBridge`$cellTimeout = 300;
 WolframBridge`$imageTimeout = 30;
+
+(* Encoding is initialised once here: every kernel (session, job, batch, verify)
+   starts by loading this file. On a Russian Windows the kernel defaults to
+   WindowsCyrillic, so Get of a UTF-8 .wl returned mojibake, Print of Cyrillic wrote
+   "????" to stdout, and a job that read code.wl in the wrong encoding exported a PNG
+   with broken labels. A plain Get now reads UTF-8 and the console carries UTF-8.
+   Override with DSH_WOLFRAM_CHARACTER_ENCODING when a task needs another encoding. *)
+WolframBridge`$characterEncoding = With[
+  {env = Environment["DSH_WOLFRAM_CHARACTER_ENCODING"]},
+  If[StringQ[env] && StringTrim[env] =!= "", StringTrim[env], "UTF-8"]];
+If[$CharacterEncoding =!= WolframBridge`$characterEncoding,
+  $CharacterEncoding = WolframBridge`$characterEncoding];
+Quiet@Check[SetOptions[$Output, CharacterEncoding -> WolframBridge`$characterEncoding], Null];
 
 (* A long-lived session must not accumulate output history; it is pure memory. *)
 $HistoryLength = 0;

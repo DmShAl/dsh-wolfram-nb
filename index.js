@@ -7,7 +7,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
 import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot, gitState } from './scaffold.js'
@@ -21,7 +21,7 @@ const LATEST_NAME = 'latest.json'
 /** Directory (inside the Session workspace) that receives exported `.nb` files. */
 const EXPORT_DIR = 'wolfram-notebooks'
 
-const BRIDGE_VERSION = '1.3.3'
+const BRIDGE_VERSION = '1.3.4'
 /** The installed build, so a session can tell which version it is actually running. */
 const PLUGIN_VERSION = (() => {
   try { return String(JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version ?? 'n/a') } catch { return 'n/a' }
@@ -181,6 +181,28 @@ function normalizeCells(args) {
   return cells
 }
 
+/** Console tail shown inline before the full log is referenced. */
+const CONSOLE_LIMIT = 1500
+/** Upper bound for a console echoed back in full; a runaway Print must not flood the answer. */
+const CONSOLE_FULL_LIMIT = 100_000
+
+/** Write UTF-8 text (no BOM) and return the absolute path; creates parent directories. */
+function writeTextFile(file, text) {
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, String(text ?? ''), 'utf8')
+  return file
+}
+
+function readTextFile(file) {
+  try { return readFileSync(file, 'utf8') } catch { return null }
+}
+
+/** Workspace-relative path for messages, so `.dsh-wolfram/jobs/j1.log` stays short. */
+function displayPath(cwd, file) {
+  const rel = relative(cwd, file)
+  return rel === '' || rel.startsWith('..') ? file.replace(/\\/g, '/') : rel.replace(/\\/g, '/')
+}
+
 function describeDocument(document, extra) {
   const lines = []
   const inert = []
@@ -223,12 +245,18 @@ function describeDocument(document, extra) {
     }
   }
   const console = String(extra?.console ?? '').trim()
+  const consoleLimit = Number.isFinite(extra?.consoleLimit) ? Math.max(0, extra.consoleLimit) : CONSOLE_LIMIT
   if (inert.length > 0) {
     const heads = [...new Set(inert)]
     const advice = heads.map((head) => `${head}: ${INERT_ADVICE[head] ?? 'try another method'}`).join('; ')
     lines.push(`Hint: the symbolic call returned unevaluated — ${advice}.`)
   }
-  if (console !== '') lines.push(`Console:\n${truncate(console, 1500)}`)
+  if (console !== '') {
+    const clipped = console.length > consoleLimit
+    lines.push(`Console:\n${clipped ? console.slice(0, consoleLimit) : console}`)
+    if (clipped) lines.push(`[console truncated: ${console.length} chars total]`)
+  }
+  if (extra?.consoleLogPath) lines.push(`Full log: ${extra.consoleLogPath}`)
   if (extra?.notebookPath) lines.push(`Notebook file: ${extra.notebookPath}`)
   if (extra?.panel === true) {
     lines.push('The rendered notebook is shown in the Wolfram panel beside the conversation.')
@@ -718,6 +746,10 @@ export function apply(ctx, config = {}) {
           type: 'boolean',
           description: 'Restart the kernel before evaluating this call (drops earlier definitions).',
         },
+        fullConsole: {
+          type: 'boolean',
+          description: 'Return the whole console instead of the first 1500 characters (the full text is also written to .dsh-wolfram/tmp/last-console.log when it is long).',
+        },
         timeoutMs: {
           type: 'number',
           description: 'Per-call timeout in milliseconds; overrides the configured default and restarts the kernel when it elapses.',
@@ -776,14 +808,26 @@ export function apply(ctx, config = {}) {
         prompt: typeof args?.title === 'string' ? args.title : '',
       })
       const hints = suggestFixes(response.console)
+      const consoleText = String(response.console ?? '')
+      const fullConsole = args?.fullConsole === true
+      const consoleLimit = fullConsole ? CONSOLE_FULL_LIMIT : CONSOLE_LIMIT
+      let consoleLogPath
+      if (consoleText.length > consoleLimit) {
+        consoleLogPath = writeTextFile(join(context.cwd, PUBLISH_DIR, 'tmp', 'last-console.log'), consoleText)
+      }
       const summary = describeDocument(document, {
-        console: response.console,
+        console: consoleText,
+        consoleLimit,
+        consoleLogPath: consoleLogPath === undefined ? undefined : displayPath(context.cwd, consoleLogPath),
         notebookPath: nbPath ? nbPath.replace(/\//g, '\\') : undefined,
         panel: true,
       }) + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
         + (document?.coerced === true
           ? '\nNote: a cell returned a value that is not valid JSON, so the notebook payload was coerced to text.'
           : '')
+        + (consoleLogPath === undefined
+          ? ''
+          : `\nFull console: ${displayPath(context.cwd, consoleLogPath)}`)
       return {
         ok: true,
         summary,
@@ -901,8 +945,14 @@ export function apply(ctx, config = {}) {
           job.error = String(document.error)
         } else {
           const hints = suggestFixes(response.console)
-          job.summary = describeDocument(document, { console: response.console, panel: false })
+          const consoleText = String(response.console ?? '')
+          // The log file is written below, in `finally`, and referenced after the
+          // summary cap so that "Log: ..." survives even when the text is clipped.
+          job.summary = describeDocument(document, { console: consoleText, panel: false })
             + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
+          if (consoleText.length > CONSOLE_LIMIT) {
+            job.summary += `\n[console truncated: ${consoleText.length} chars total]`
+          }
           const hasGraphics = Array.isArray(document?.cells)
             && document.cells.some((cell) => cell.kind === 'graphics' || cell.kind === 'image')
           if (hasGraphics) {
@@ -913,13 +963,23 @@ export function apply(ctx, config = {}) {
             job.published = true
             job.summary += '\nGraphics published to the Wolfram panel.'
           }
-          job.console = response.console
+          job.console = consoleText
           job.status = 'done'
         }
       } catch (error) {
         job.status = job.cancelled === true ? 'cancelled' : 'failed'
         if (job.cancelled !== true) job.error = String(error?.message ?? error)
       } finally {
+        // Every finished job keeps its complete console, whatever the outcome: a
+        // truncated summary used to hide the end of the log with no way to get it.
+        const consoleText = job.console !== '' ? job.console : job.progress.join('\n')
+        try {
+          job.logPath = writeTextFile(join(job.cwd, PUBLISH_DIR, 'jobs', `${job.id}.log`), consoleText)
+          const logLine = `Log: ${displayPath(job.cwd, job.logPath)}`
+          job.summary = job.summary === '' ? logLine : `${job.summary}\n${logLine}`
+        } catch (error) {
+          job.logError = String(error?.message ?? error)
+        }
         job.finishedAt = job.finishedAt ?? Date.now()
         kernel.dispose()
         runningJobs -= 1
@@ -940,15 +1000,16 @@ export function apply(ctx, config = {}) {
     name: 'wolfram_job',
     description: [
       'Run a Wolfram Language evaluation as a background job in its own kernel.',
-      'action=submit starts a job and returns its id; status/result/cancel/list manage it.',
-      'action=result takes `wait` (seconds, up to 300) and blocks until the job finishes instead of reporting "still running".',
+      'action=submit starts a job and returns its id; status/result/cancel/log/list manage it.',
+      'action=result takes `wait` (seconds, up to 300) and blocks until the job finishes instead of reporting "still running"; `full: true` appends the complete console.',
+      'Every finished job writes its whole console to .dsh-wolfram/jobs/<id>.log; action="log" returns that text (or `tail` lines).',
       'Use it for long computations that would otherwise hit the 180 s per-call timeout.',
     ].join(' '),
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['submit', 'status', 'result', 'cancel', 'list'] },
-        id: { type: 'string', description: 'Job id for status/result/cancel.' },
+        action: { type: 'string', enum: ['submit', 'status', 'result', 'cancel', 'log', 'list'] },
+        id: { type: 'string', description: 'Job id for status/result/cancel/log.' },
         code: { type: 'string', description: 'Wolfram Language source for a submit.' },
         cells: {
           type: 'array',
@@ -967,6 +1028,9 @@ export function apply(ctx, config = {}) {
         timeoutMs: { type: 'number', description: 'Job timeout in milliseconds (default 30 min).' },
         exportNotebook: { type: 'boolean', description: 'Write a .nb file for the job result (default false).' },
         wait: { type: 'number', description: 'action="result": seconds to wait for a running job (max 300, default 0).' },
+        full: { type: 'boolean', description: 'action="result": append the complete console from the job log (default false).' },
+        maxChars: { type: 'number', description: 'action="log": characters to return from the end of the log (default 20000, max 200000).' },
+        tail: { type: 'number', description: 'action="log": return only the last N lines instead of maxChars.' },
       },
       required: ['action'],
     },
@@ -1023,6 +1087,7 @@ export function apply(ctx, config = {}) {
           timeoutMs: jobTimeout,
           summary: '',
           console: '',
+          logPath: null,
           progress: [],
           error: null,
           cancelled: false,
@@ -1071,6 +1136,7 @@ export function apply(ctx, config = {}) {
         } else if (job.status === 'running' && job.progress.length > 0) {
           extra = `\nProgress:\n${job.progress.slice(-10).join('\n')}`
         }
+        if (job.logPath !== null) extra += `\nLog: ${displayPath(job.cwd, job.logPath)}`
         return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${extra}`, jobId: job.id }
       }
       if (action === 'cancel') {
@@ -1082,6 +1148,38 @@ export function apply(ctx, config = {}) {
           if (job.kernel !== null) job.kernel.killSync()
         }
         return { ok: true, summary: `Job ${job.id}: ${job.status}.`, jobId: job.id }
+      }
+      if (action === 'log') {
+        if (job.logPath === null || !existsSync(job.logPath)) {
+          return {
+            ok: false,
+            summary: `Job ${job.id}: no log file yet (status ${job.status}). A finished job always writes one.`,
+            jobId: job.id,
+          }
+        }
+        const text = readTextFile(job.logPath)
+        if (text === null) {
+          return { ok: false, summary: `Job ${job.id}: the log file could not be read: ${displayPath(job.cwd, job.logPath)}`, jobId: job.id }
+        }
+        const requestedLines = Math.floor(Number(args?.tail) || 0)
+        let body = text
+        let note = ''
+        if (requestedLines > 0) {
+          const all = text.split('\n')
+          body = all.slice(Math.max(0, all.length - requestedLines)).join('\n')
+          note = `, last ${requestedLines} line(s)`
+        } else {
+          const maxChars = Math.max(500, Math.min(200_000, Math.floor(Number(args?.maxChars) || 20_000)))
+          if (body.length > maxChars) {
+            body = body.slice(body.length - maxChars)
+            note = `, last ${maxChars} chars`
+          }
+        }
+        return {
+          ok: true,
+          summary: `Log ${displayPath(job.cwd, job.logPath)} (${text.length} chars${note}):\n${body}`,
+          jobId: job.id,
+        }
       }
       if (action === 'result') {
         const waitSeconds = Math.max(0, Math.min(300, Number(args?.wait) || 0))
@@ -1096,9 +1194,20 @@ export function apply(ctx, config = {}) {
         const waited = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
         if (job.status === 'queued') return { ok: false, summary: `Job ${job.id} is queued and has not started yet.`, jobId: job.id }
         if (job.status === 'running') return { ok: false, summary: `Job ${job.id} is still running (${waited} s).`, jobId: job.id }
-        if (job.status === 'failed') return { ok: false, summary: `Job ${job.id} failed: ${job.error}`, jobId: job.id }
+        if (job.status === 'failed') {
+          const log = job.logPath === null ? '' : `\nLog: ${displayPath(job.cwd, job.logPath)}`
+          return { ok: false, summary: `Job ${job.id} failed: ${job.error}${log}`, jobId: job.id }
+        }
         if (job.status === 'cancelled') return { ok: false, summary: `Job ${job.id} was cancelled.`, jobId: job.id }
-        return { ok: true, summary: job.summary === '' ? '(no output)' : job.summary, jobId: job.id }
+        let summary = job.summary === '' ? '(no output)' : job.summary
+        if (args?.full === true && job.logPath !== null) {
+          const consoleText = readTextFile(job.logPath) ?? ''
+          const clipped = consoleText.length > CONSOLE_FULL_LIMIT
+          summary += `\n\nFull console (${job.logPath === null ? '' : displayPath(job.cwd, job.logPath)}):\n${clipped
+            ? `${consoleText.slice(0, CONSOLE_FULL_LIMIT)}\n[console truncated at ${CONSOLE_FULL_LIMIT} of ${consoleText.length} chars]`
+            : consoleText}`
+        }
+        return { ok: true, summary, jobId: job.id }
       }
       throw new Error(`Unknown wolfram_job action: ${action}`)
     },
@@ -1689,6 +1798,7 @@ export function apply(ctx, config = {}) {
         ? Number(args.timeoutMs)
         : timeoutMs
       const results = new Array(items.length)
+      const runId = `batch-${Date.now().toString(36)}`
       let cursor = 0
       const worker = async () => {
         while (cursor < items.length) {
@@ -1709,13 +1819,22 @@ export function apply(ctx, config = {}) {
               cells: [{ type: 'input', code: item.code }],
             }, { timeoutMs: perItemTimeout })
             const document = response.document
+            const consoleText = String(response.console ?? '')
+            // Each item keeps its console on disk: the answer truncates every item
+            // to 800 chars, which used to hide the end of a long run.
+            const logPath = writeTextFile(
+              join(context.cwd, PUBLISH_DIR, 'batch', runId, `item-${index + 1}.log`),
+              consoleText,
+            )
+            const logLabel = displayPath(context.cwd, logPath)
             if (document?.error) {
-              results[index] = { ok: false, summary: String(document.error) }
+              results[index] = { ok: false, summary: String(document.error), logPath: logLabel }
             } else {
               const hints = suggestFixes(response.console)
               results[index] = {
                 ok: true,
-                summary: describeDocument(document, { console: response.console })
+                logPath: logLabel,
+                summary: describeDocument(document, { console: consoleText })
                   + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`),
               }
             }
@@ -1732,7 +1851,8 @@ export function apply(ctx, config = {}) {
       const seconds = ((Date.now() - started) / 1000).toFixed(1)
       const lines = [`Batch: ${items.length} item(s), ${okCount} ok, ${items.length - okCount} failed in ${seconds} s (parallel ${parallel}).`]
       results.forEach((result, index) => {
-        lines.push(`[${index + 1}] ${result.ok ? 'OK' : 'FAILED'}: ${truncate(result.summary, 800)}`)
+        const log = result.logPath ? ` (log ${result.logPath})` : ''
+        lines.push(`[${index + 1}] ${result.ok ? 'OK' : 'FAILED'}${log}: ${truncate(result.summary, 800)}`)
       })
       return { ok: okCount === items.length, summary: lines.join('\n'), items: items.length }
     },
@@ -1745,6 +1865,8 @@ export function apply(ctx, config = {}) {
       'Statically inspect Wolfram Language code with CodeInspector before running it: syntax errors,',
       'suspicious constructs, unknown symbols. Never evaluates the code, so it is cheap and safe.',
       'Pass `code`, or `path` to inspect a file (for example a task\'s code.wl).',
+      'In script mode it hides SuspiciousSessionSymbol noise (Print/Set in a standalone script is normal);',
+      '`strict: true` shows everything, and `limit` applies after that filtering.',
       'Use it on a non-trivial snippet before wolfram_eval when the syntax is uncertain.',
     ].join(' '),
     parameters: {
@@ -1752,9 +1874,9 @@ export function apply(ctx, config = {}) {
       properties: {
         code: { type: 'string', description: 'Wolfram Language source to inspect (not evaluated).' },
         path: { type: 'string', description: 'File to inspect instead of `code`, relative to the workspace.' },
-        limit: { type: 'number', description: 'Maximum findings to return (default 20).' },
+        limit: { type: 'number', description: 'Maximum findings to return after filtering (default 20).' },
+        strict: { type: 'boolean', description: 'Show every finding, including SuspiciousSessionSymbol (default false).' },
       },
-      required: ['code'],
     },
     output: {
       schema: {
@@ -1776,31 +1898,48 @@ export function apply(ctx, config = {}) {
       }
       if (code.trim() === '') throw new Error('wolfram_check needs `code` or `path`.')
       const limit = Math.max(1, Math.min(100, Math.floor(Number(args?.limit) || 20)))
-      const cell = `Module[{res, findings},
+      const strict = args?.strict === true
+      const cell = `Module[{res, findings, tags},
   res = Quiet@Check[CodeInspector\`CodeInspect[${wlString(code)}], $Failed];
   If[res === $Failed,
     Print["${CHECK_MARKER}" <> "{\\"ok\\":false,\\"error\\":\\"the code could not be parsed\\"}"],
     findings = Map[Function[o, With[{src = Cases[o[[4]], {a_Integer, b_Integer}, Infinity]},
         <|"tag" -> o[[1]], "severity" -> o[[3]], "message" -> o[[2]],
-          "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[${limit}]]];
+          "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[500]]];
+    tags = Map[{#[[1]], #[[2]]} &, Tally[Map[#[[1]] &, res]]];
     Print["${CHECK_MARKER}" <> StringReplace[ExportString[
-      <|"ok" -> True, "count" -> Length[res], "findings" -> findings|>, "JSON"], "\\n" -> ""]]]
+      <|"ok" -> True, "count" -> Length[res], "findings" -> findings, "tags" -> tags|>, "JSON"], "\\n" -> ""]]]
   ]`
       const payload = await evaluateMarked(context, cell, CHECK_MARKER, 'Needs["CodeInspector`"];')
       if (payload.ok !== true) {
         return { ok: false, count: 0, summary: `CodeInspector: ${payload.error ?? 'failed'}` }
       }
       const findings = Array.isArray(payload.findings) ? payload.findings : []
+      const tags = Array.isArray(payload.tags) ? payload.tags : []
+      // A standalone script legitimately uses Print/Set/Clear and Cyrillic strings
+      // and comments; CodeInspector reports both as noise, which buried the real
+      // errors (970 findings on a task script). strict: true keeps everything.
+      const SCRIPT_NOISE = new Set(['SuspiciousSessionSymbol', 'NonASCIICharacter'])
+      const isScriptNoise = (finding) => SCRIPT_NOISE.has(String(finding?.tag ?? ''))
+      const hidden = strict ? [] : findings.filter(isScriptNoise)
+      const visible = strict ? findings : findings.filter((finding) => !isScriptNoise(finding))
+      const shown = visible.slice(0, limit)
       const label = inspected === 'code' ? 'CodeInspector' : `CodeInspector (${inspected})`
-      const lines = [findings.length === 0
-        ? `${label}: no issues.`
-        : `${label}: ${payload.count} issue(s).`]
-      for (const finding of findings) {
+      const lines = [visible.length === 0
+        ? `${label}: no issues${hidden.length > 0 ? ` (${hidden.length} script-mode finding(s) hidden)` : ''}.`
+        : `${label}: ${visible.length} issue(s).`]
+      for (const finding of shown) {
         const where = finding.line > 0 ? `line ${finding.line}` : 'code'
         lines.push(`  ${where}  ${String(finding.severity ?? '?').padEnd(8)} ${String(finding.message ?? '').trim()} [${finding.tag ?? '?'}]`)
       }
-      if (payload.count > findings.length) lines.push(`  … ${payload.count - findings.length} more`)
-      return { ok: findings.length === 0, count: findings.length, summary: lines.join('\n') }
+      if (visible.length > shown.length) lines.push(`  … ${visible.length - shown.length} more (raise limit)`)
+      if (tags.length > 0) {
+        lines.push(`Tags: ${tags.map(([tag, count]) => `${tag} ×${count}`).join(', ')}`)
+      }
+      if (hidden.length > 0) {
+        lines.push(`Hidden ${hidden.length} script-mode finding(s) (SuspiciousSessionSymbol, NonASCIICharacter): Print/Set/Clear and Cyrillic text in a standalone script are expected; pass strict: true to see them.`)
+      }
+      return { ok: visible.length === 0, count: visible.length, summary: lines.join('\n') }
     },
   }
 

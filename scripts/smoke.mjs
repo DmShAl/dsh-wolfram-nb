@@ -136,6 +136,39 @@ try {
     throw new Error('job did not finish in 30 s')
   })
 
+  await step('UTF-8 console', async () => {
+    const result = await call('wolfram_eval', { code: 'Print["Привет, мир"]' })
+    need(/Привет, мир/.test(result.summary), `mangled console: ${result.summary.slice(0, 120)}`)
+    return 'exact Cyrillic'
+  })
+
+  await step('wolfram_job full log', async () => {
+    const submitted = await call('wolfram_job', {
+      action: 'submit',
+      code: 'Do[Print["line ", i, " — полный лог"], {i, 1, 80}]; Print["END-OF-JOB"]',
+      title: 'smoke log',
+    })
+    const id = /id="([^"]+)"/.exec(submitted.summary)?.[1]
+    need(id, `no job id in: ${submitted.summary}`)
+    const result = await call('wolfram_job', { action: 'result', id, wait: 120 })
+    need(/Log: \.dsh-wolfram\/jobs\//.test(result.summary), result.summary.slice(0, 160))
+    need(/console truncated: \d+ chars total/.test(result.summary), 'no truncation marker')
+    const log = await call('wolfram_job', { action: 'log', id })
+    need(/END-OF-JOB/.test(log.summary) && /line 80/.test(log.summary), 'log is incomplete')
+    return 'full log on disk'
+  })
+
+  await step('wolfram_check script mode', async () => {
+    const script = 'v = {};\nDo[Print["шаг ", i]; v[i] = i, {i, 3}];\nTotal[Values[v]]\n'
+    const normal = await call('wolfram_check', { code: script })
+    need(!/\[SuspiciousSessionSymbol\]/.test(normal.summary), 'script noise was not hidden')
+    const strict = await call('wolfram_check', { code: script, strict: true })
+    need(/\[SuspiciousSessionSymbol\]/.test(strict.summary), 'strict did not show everything')
+    const broken = await call('wolfram_check', { code: 'f[x_] := (x + 1\n' })
+    need(/Missing closer/.test(broken.summary), 'a syntax error was not reported')
+    return 'noise hidden, syntax kept'
+  })
+
   await step('wolfram_notebook open', async () => {
     need(createdNotebook !== '', 'no notebook file was created earlier')
     const result = await call('wolfram_notebook', { action: 'open', path: createdNotebook })

@@ -88,7 +88,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /bridge: 1\.3\.3/)
+  assert.match(status.summary, /bridge: 1\.3\.4/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -929,7 +929,7 @@ test('wolfram_notebook status names the running plugin version', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
   assert.match(status.summary, /Plugin \d+\.\d+\.\d+/)
-  assert.match(status.summary, /bridge: 1\.3\.3/)
+  assert.match(status.summary, /bridge: 1\.3\.4/)
 })
 
 test('wolfram_job result waits for a running job when asked', async (t) => {
@@ -957,6 +957,123 @@ test('wolfram_check inspects a file when given a path', async (t) => {
   const result = await tools.get('wolfram_check').execute({ path: file }, {})
   assert.match(result.summary, /CodeInspector \(.+code\.wl\)/)
   assert.match(result.summary, /Missing closer/)
+})
+
+test('the kernel speaks UTF-8: console text and Get of a UTF-8 .wl', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // Every kernel starts with bridge.wl, which now sets $CharacterEncoding=UTF-8.
+  // Before that a Russian Windows kernel printed "????" and read UTF-8 sources as
+  // WindowsCyrillic, which also mangled labels on exported figures.
+  const encoding = await tools.get('wolfram_eval').execute({ code: '$CharacterEncoding', exportNotebook: false }, {})
+  assert.match(encoding.summary, /UTF-8/)
+
+  const printed = await tools.get('wolfram_eval').execute(
+    { code: 'Print["Привет, мир"]', exportNotebook: false },
+    {},
+  )
+  assert.match(printed.summary, /Привет, мир/)
+
+  const dir = mkdtempSync(join(tmpdir(), 'wl-utf8-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'probe.wl')
+  writeFileSync(file, 'probe = "Привет";\n', 'utf8')
+  const got = await tools.get('wolfram_eval').execute(
+    { code: `Get["${file.replace(/\\/g, '/')}"]; probe === "Привет"`, exportNotebook: false },
+    {},
+  )
+  assert.match(got.summary, /Out: True/)
+})
+
+test('wolfram_eval keeps a long console on disk and can return all of it', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const code = 'Do[Print["line ", i], {i, 1, 300}]; "done"'
+  const clipped = await tools.get('wolfram_eval').execute({ code, exportNotebook: false }, {})
+  assert.match(clipped.summary, /\[console truncated: \d+ chars total\]/)
+  assert.match(clipped.summary, /Full console: \.dsh-wolfram\/tmp\/last-console\.log/)
+  assert.equal(existsSync(join(process.cwd(), '.dsh-wolfram', 'tmp', 'last-console.log')), true)
+
+  const full = await tools.get('wolfram_eval').execute({ code, fullConsole: true, exportNotebook: false }, {})
+  assert.doesNotMatch(full.summary, /\[console truncated/)
+  assert.match(full.summary, /line 300/)
+})
+
+test('a finished job always writes its full log and reports the path', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({
+    action: 'submit',
+    code: 'Do[Print["line ", i, " — проверка кириллицы и полного лога"], {i, 1, 120}]; Print["END-OF-JOB"]',
+    title: 'log regression',
+  }, {})
+  const result = await job.execute({ action: 'result', id: submitted.jobId, wait: 120 }, {})
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /\[console truncated: \d+ chars total\]/)
+  const logRel = (result.summary.match(/^Log: (.+)$/m) ?? [])[1]
+  assert.ok(logRel, 'the summary has no Log line')
+  assert.equal(existsSync(join(process.cwd(), logRel)), true)
+
+  const log = await job.execute({ action: 'log', id: submitted.jobId }, {})
+  assert.equal(log.ok, true)
+  assert.match(log.summary, /line 120/)
+  assert.match(log.summary, /END-OF-JOB/)
+  assert.match(log.summary, /проверка кириллицы/)
+
+  const full = await job.execute({ action: 'result', id: submitted.jobId, full: true }, {})
+  assert.match(full.summary, /END-OF-JOB/)
+
+  const status = await job.execute({ action: 'status', id: submitted.jobId }, {})
+  assert.match(status.summary, /Log: \.dsh-wolfram\/jobs\//)
+})
+
+test('a job reads a UTF-8 source and exports a PNG with a Cyrillic label', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const dir = mkdtempSync(join(tmpdir(), 'wl-job-png-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const png = join(dir, 'label.png')
+  const source = join(dir, 'figure.wl')
+  writeFileSync(source, [
+    'p = Plot[Sin[x], {x, 0, 2 Pi}, PlotLabel -> "Привет, мир", ImageSize -> 300];',
+    `Export["${png.replace(/\\/g, '/')}", p, ImageResolution -> 72];`,
+    '"figure done"',
+    '',
+  ].join('\n'), 'utf8')
+
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({ action: 'submit', code: `Get["${source.replace(/\\/g, '/')}"]`, title: 'png utf8' }, {})
+  const result = await job.execute({ action: 'result', id: submitted.jobId, wait: 120 }, {})
+  assert.equal(result.ok, true)
+  assert.equal(existsSync(png), true)
+  const bytes = readFileSync(png)
+  assert.ok(bytes.length > 3000, `PNG is suspiciously small: ${bytes.length} bytes`)
+  assert.deepEqual([...bytes.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47])
+})
+
+test('wolfram_check hides script-mode noise but keeps real errors', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const check = tools.get('wolfram_check')
+  const script = 'results = {};\nDo[Print["шаг ", i]; results[i] = i^2, {i, 3}];\nPrint[Total[Values[results]]];\n'
+
+  const scripted = await check.execute({ code: script }, {})
+  assert.doesNotMatch(scripted.summary, /\[SuspiciousSessionSymbol\]/)
+  assert.doesNotMatch(scripted.summary, /\[NonASCIICharacter\]/)
+  assert.match(scripted.summary, /pass strict: true/)
+
+  const strict = await check.execute({ code: script, strict: true }, {})
+  assert.match(strict.summary, /\[SuspiciousSessionSymbol\]/)
+
+  const broken = await check.execute({ code: 'f[x_] := (x^2 + 1\n' }, {})
+  assert.match(broken.summary, /Missing closer/)
+  assert.match(broken.summary, /Tags: /)
 })
 
 

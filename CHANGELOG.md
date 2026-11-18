@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.16.0 — 2026-11-19
+
+### Fixed
+
+- **UTF-8 in every kernel (bridge 1.3.4).** A Russian Windows kernel defaults to
+  `WindowsCyrillic`: `Get` of a UTF-8 `.wl` without BOM returned mojibake, `Print` of Cyrillic
+  wrote `????` to the console, and a job that read `code.wl` in the wrong encoding exported a
+  PNG with broken labels. `bridge.wl` now sets `$CharacterEncoding = "UTF-8"` and the `$Output`
+  encoding during initialisation, before `@@WB_READY@@`, so session, job, batch and verify
+  kernels all start correct. `DSH_WOLFRAM_CHARACTER_ENCODING` overrides the default.
+- **The full job console is never lost.** Every finished job (success, failure or cancel) writes
+  its whole console to `.dsh-wolfram/jobs/<id>.log` and the summary carries `Log: …`; when the
+  inline console is cut at 1500 characters the summary says `[console truncated: N chars total]`
+  instead of silently dropping the end. A 120-line `Print` loop used to end at `line 35` with no
+  trace of `END-OF-JOB`.
+- **`wolfram_eval` keeps a long console** in `.dsh-wolfram/tmp/last-console.log` and says so;
+  `fullConsole: true` returns the whole text.
+- **`wolfram_batch` keeps a per-item console** in `.dsh-wolfram/batch/<run>/item-<n>.log` and
+  prints the path on each line, because the answer truncates every item to 800 characters.
+- **`wolfram_check` is signal instead of noise.** Script mode hides `SuspiciousSessionSymbol`
+  and `NonASCIICharacter` by default (Print/Set/Clear and Cyrillic strings in a standalone script
+  are normal — a task script produced 970 findings, almost all of them this noise), shows per-tag
+  counters and how many were hidden; `strict: true` returns everything. `limit` applies after
+  filtering, and the schema now accepts `code` **or** `path` instead of requiring `code`.
+
+### Added
+
+- `wolfram_job action="log"` — reads the log file (`maxChars`, default 20000, or `tail: N` lines);
+  `action="result"` accepts `full: true` to append the complete console; `action="status"` shows
+  the log path.
+- Three smoke steps (UTF-8 console, job log, check script mode) — 14/14.
+
+### Documentation
+
+- `README.md`, `README.en.md`: the UTF-8 mode and its override, the job log (`action="log"`,
+  `full: true`), `wolfram_check strict`, the new data locations.
+- `workspace/AGENTS.md`: UTF-8 is the normal mode (no `Block[$CharacterEncoding]` or BOM
+  workarounds), jobs keep their full log, `.dsh-wolfram/` layout updated.
+
+### Tests
+
+- 66 tests, five new: UTF-8 console and `Get` of a UTF-8 `.wl`; a long eval console on disk and
+  `fullConsole`; a job's full log, `action="log"` and `full: true`; a job reading a UTF-8 source
+  and exporting a PNG with a Cyrillic label; `wolfram_check` hiding script noise while reporting
+  a syntax error, with `strict` showing everything.
+
 ## 1.15.0 — 2026-11-18
 
 ### Changed
