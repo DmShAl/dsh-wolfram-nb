@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.13.3 — 2026-11-18
+
+### Changed
+
+- **A fresh workspace starts on `main`.** `/initmath` ran plain `git init`, which on this machine
+  produced `master` while the repositories the workspace is pushed to use `main`; it now asks for
+  `git init -b main` and falls back to the old default when git does not know the flag.
+- **`InitMath.cmd` runs unattended when a folder is passed.** The script paused at the end even
+  for `InitMath.cmd "D:\path"`, so a script or an agent calling it waited for a keypress; the
+  pause now belongs to the interactive (no-argument) path only.
+
+### Added
+
+- **`wolfram_help` is no longer a dead end.** A query with no kernel symbol match points at
+  `wolfram_doc`, because file formats, guide pages and messages are not symbols.
+- **`wolfram_state action="symbols"` explains string patterns.** A regex-looking pattern
+  (`Global`*[A-Z]*`) matches nothing and now says that `Names[]` takes Wolfram string patterns,
+  not regular expressions.
+
+### Tests
+
+- 55 tests: the workspace branch is `main`, the zero-match hint, the pattern hint.
+
 ## 1.13.2 — 2026-11-18
 
 ### Fixed

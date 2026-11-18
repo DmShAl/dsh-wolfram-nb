@@ -636,6 +636,9 @@ test('initmath initializes a git repository and can snapshot the work', (t) => {
   assert.equal(init.ok, true)
   assert.match(init.detail, /initialized/)
   assert.equal(existsSync(join(dir, '.git')), true)
+  // `-b main` so a fresh workspace matches the repositories it is pushed to.
+  const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim()
+  assert.equal(branch, 'main')
 
   // A second run on the same folder must not re-initialize it.
   assert.match(initGitRepository(dir).detail, /already/)
@@ -859,8 +862,7 @@ test('a documentation root that only has the symbol section still resolves', asy
   assert.match(result.summary, /CSV/)
 })
 
-test('a timed-out evaluation leaves no request file behind', async (t) => {
-  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+test('a timed-out evaluation leaves no request file behind', async (t) => {  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
   teardown(t, cleanups)
 
   const tmpDir = join(process.cwd(), '.dsh-wolfram', 'tmp')
@@ -881,6 +883,26 @@ test('a timed-out evaluation leaves no request file behind', async (t) => {
     },
   )
   assert.equal(countRequests(), before)
+})
+
+test('wolfram_help points at wolfram_doc when no kernel symbol matches', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // Formats and guide pages are not symbols in the kernel namespace; a zero-match
+  // answer used to be a dead end.
+  const result = await tools.get('wolfram_help').execute({ query: 'ZzzzNotAThing' }, {})
+  assert.equal(result.total, 0)
+  assert.match(result.summary, /wolfram_doc/)
+})
+
+test('wolfram_state symbols hints at string patterns instead of regex', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_state').execute({ action: 'symbols', pattern: 'Global`*[A-Z]*' }, {})
+  assert.match(result.summary, /0 name\(s\)/)
+  assert.match(result.summary, /string patterns/)
 })
 
 

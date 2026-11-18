@@ -200,7 +200,10 @@ const LFS_PATTERNS = ['*.pdf', '*.docx', '*.png', '*.jpg', '*.jpeg', '*.xlsx', '
  */
 export function initGitRepository(dir, message = 'initmath: workspace template') {
   if (isGitRepository(dir)) return { ok: true, created: false, lfs: false, detail: 'already a git repository' }
-  const init = git(['init', '-q'], dir)
+  // `-b main` matches the repositories this workspace talks to; older git versions
+  // do not know the flag, so fall back to their default branch.
+  let init = git(['init', '-q', '-b', 'main'], dir)
+  if (!init.ok) init = git(['init', '-q'], dir)
   if (!init.ok) return { ok: false, created: false, lfs: false, detail: init.error?.message ?? init.stderr ?? 'git init failed' }
   git(['config', 'core.autocrlf', 'false'], dir)
 

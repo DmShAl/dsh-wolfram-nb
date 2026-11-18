@@ -1485,9 +1485,13 @@ export function apply(ctx, config = {}) {
     "names" -> Take[names, UpTo[${limit}]]|>, "JSON"], "\\n" -> ""]];
 ];`
         const payload = await evaluateMarked(context, code, STATE_MARKER)
+        const names = Array.isArray(payload.names) ? payload.names : []
+        const regexHint = names.length === 0 && /[[\]()|+\\]/.test(pattern)
+          ? '\nHint: Names[] takes Wolfram string patterns (* matches any sequence), not regular expressions.'
+          : ''
         return {
           ok: true,
-          summary: `${payload.count} name(s) matching ${pattern}:\n${(payload.names ?? []).join('\n')}`,
+          summary: `${payload.count} name(s) matching ${pattern}:\n${names.join('\n')}${regexHint}`,
         }
       }
       const saveFile = () => resolveWorkspacePath(context.cwd, args?.path, join(PUBLISH_DIR, `state-${timestamp()}.mx`))
@@ -1816,6 +1820,9 @@ export function apply(ctx, config = {}) {
       if (payload.ok !== true) return { ok: false, total: 0, summary: 'wolfram_help failed.' }
       const items = Array.isArray(payload.items) ? payload.items : []
       const lines = [`Symbols matching "${query}": ${payload.total}${payload.total > items.length ? ` (showing ${items.length})` : ''}`]
+      if (items.length === 0) {
+        lines.push('No kernel symbol matches. File formats, guide pages and messages are not symbols — try wolfram_doc (for example "CSV"), or a shorter name.')
+      }
       for (const item of items) {
         const attributes = Array.isArray(item.attributes) && item.attributes.length > 0 ? ` [${item.attributes.join(', ')}]` : ''
         const options = Array.isArray(item.options) ? item.options : []
