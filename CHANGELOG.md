@@ -4,27 +4,27 @@
 
 ### Changed
 
-- **Русский интерфейс панели.** `client.js` регистрирует словарь `ru` рядом с `en` и `zh`: вкладка,
-  пустое состояние, выбор ноутбука, подписи «Ядро / обновлено», сообщения об ошибках разбора и
-  таймаута, кнопка «Подготовить» и её поповер. Число ячеек склоняется по-русски
-  («1 ячейка / 3 ячейки / 5 ячеек»); ключ `meta.cells` теперь несёт три формы через `|`.
-  Язык берётся из настроек DSH, поэтому китайские подписи видны только при активном китайском
-  интерфейсе — переключение языка в настройках даёт русские подписи плагина.
-- **Метаданные плагина для русской локали** — `locale/ru.json` (`meta.title`, `meta.description`).
-- **Документация на русском.** `README.md` переписан по-русски и актуализирован (версия 1.15.0,
-  новые параметры инструментов, установка через `build-tgz.bat install` с удалением предыдущей
-  версии, ветка `main`, 59 тестов). Китайский текст исходного проекта сохранён как
-  `README.zh.md` с пометкой, что он исторический; `README.en.md` обновлён и ссылается на русский
-  как основной. `RELEASING.md` переписан под фактический локальный выпуск (сборка, установка,
-  тег, push; npm-публикация здесь не используется). `INSTALL.md` описывает `remove` + `add`,
-  проверку версии и отсутствие паузы у `InitMath.cmd` с аргументом.
-- **Метаданные репозитория** — `homepage`, `repository` и `bugs` в `package.json` указывают на
-  `DmShAl/dsh-wolfram-nb`; npm-пакет upstream упоминается только в тексте README.
+- **Russian panel interface.** `client.js` registers an `ru` dictionary next to `en` and `zh`: the
+  tab, the empty state, the notebook picker, the "Kernel / updated" labels, the parse and timeout
+  messages, the "Подготовить" chip and its popover. The cell count is inflected
+  ("1 ячейка / 3 ячейки / 5 ячеек") — `meta.cells` carries three plural forms separated by `|`.
+  The dictionary is chosen by the DSH interface language, so the Chinese labels appeared because
+  the active language was Chinese; with the language switched the plugin follows it.
+- **Plugin metadata for the Russian locale** — `locale/ru.json` (`meta.title`, `meta.description`).
+- **Documentation in Russian.** `README.md` is rewritten and current (1.15.0, the new tool
+  parameters, install through `build-tgz.bat install` with the remove step, `main` branch, 61
+  tests). The Chinese text of the upstream project is kept as `README.zh.md` with a notice;
+  `README.en.md` is updated and points at the Russian primary. `RELEASING.md` is rewritten for the
+  local release flow actually used here (build, install, tag, push; no npm publishing), and
+  `INSTALL.md` documents the remove-then-add step, the version check and the unattended
+  `InitMath.cmd`.
+- **Repository metadata** — `homepage`, `repository` and `bugs` in `package.json` point at
+  `DmShAl/dsh-wolfram-nb`; the upstream npm package is mentioned in the README text only.
 
 ### Tests
 
-- 61 тест: два клиентских теста проверяют, что у `ru` тот же набор ключей, что у `en`, что в нём
-  нет китайских символов, что `meta.cells` содержит три формы, и что `locale/ru.json` заполнен.
+- 61 tests: two client tests check that `ru` has exactly the keys of `en`, that it contains no
+  Chinese characters, that `meta.cells` has three forms, and that `locale/ru.json` is filled in.
 
 ## 1.14.0 — 2026-11-18
 
