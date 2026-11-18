@@ -993,7 +993,10 @@ test('wolfram_eval keeps a long console on disk and can return all of it', async
   const code = 'Do[Print["line ", i], {i, 1, 300}]; "done"'
   const clipped = await tools.get('wolfram_eval').execute({ code, exportNotebook: false }, {})
   assert.match(clipped.summary, /\[console truncated: \d+ chars total\]/)
-  assert.match(clipped.summary, /Full console: \.dsh-wolfram\/tmp\/last-console\.log/)
+  assert.match(clipped.summary, /^Full log: \.dsh-wolfram\/tmp\/last-console\.log$/m)
+  // One path line: the summary used to repeat it as "Full log:" and "Full console:".
+  assert.equal((clipped.summary.match(/\.dsh-wolfram\/tmp\/last-console\.log/g) ?? []).length, 1)
+  assert.doesNotMatch(clipped.summary, /Full console:/)
   assert.equal(existsSync(join(process.cwd(), '.dsh-wolfram', 'tmp', 'last-console.log')), true)
 
   const full = await tools.get('wolfram_eval').execute({ code, fullConsole: true, exportNotebook: false }, {})
@@ -1013,7 +1016,8 @@ test('a finished job always writes its full log and reports the path', async (t)
   }, {})
   const result = await job.execute({ action: 'result', id: submitted.jobId, wait: 120 }, {})
   assert.equal(result.ok, true)
-  assert.match(result.summary, /\[console truncated: \d+ chars total\]/)
+  // Exactly one marker: startJob used to add a second one on top of describeDocument.
+  assert.equal((result.summary.match(/\[console truncated:/g) ?? []).length, 1)
   const logRel = (result.summary.match(/^Log: (.+)$/m) ?? [])[1]
   assert.ok(logRel, 'the summary has no Log line')
   assert.equal(existsSync(join(process.cwd(), logRel)), true)
@@ -1074,6 +1078,46 @@ test('wolfram_check hides script-mode noise but keeps real errors', async (t) =>
   const broken = await check.execute({ code: 'f[x_] := (x^2 + 1\n' }, {})
   assert.match(broken.summary, /Missing closer/)
   assert.match(broken.summary, /Tags: /)
+})
+
+test('wolfram_check counters add up on a large finding set', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  // The cap used to apply to the findings array while the counters came from the full
+  // result: "no issues (500 hidden)" next to "Tags: … = 807". Counts must always add up.
+  const lines = []
+  for (let i = 1; i <= 120; i += 1) lines.push(`Print["строка ${i}"]`)
+  lines.push('f[x_] := (x^2 + 1')
+  const code = lines.join('\n')
+  const check = tools.get('wolfram_check')
+
+  const dirty = await check.execute({ code }, {})
+  const tagSum = (dirty.summary.match(/×(\d+)/g) ?? []).reduce((sum, part) => sum + Number(part.slice(1)), 0)
+  const visible = Number((dirty.summary.match(/CodeInspector: (\d+) issue\(s\)/) ?? [])[1])
+  const hidden = Number((dirty.summary.match(/Hidden (\d+) script-mode/) ?? [])[1])
+  assert.ok(Number.isFinite(visible) && Number.isFinite(hidden), dirty.summary)
+  assert.equal(visible + hidden, tagSum)
+  // 120 Print warnings + 720 Cyrillic remarks: the old 500-finding cap reported 500.
+  assert.equal(hidden, 840)
+  assert.equal(visible, 2) // Missing closer and UnusedParameter stay visible
+
+  const strict = await check.execute({ code, strict: true }, {})
+  const strictTotal = Number((strict.summary.match(/CodeInspector: (\d+) issue\(s\)/) ?? [])[1])
+  assert.equal(strictTotal, tagSum)
+  assert.ok(strictTotal > 20, `strict total ${strictTotal} should exceed the default limit`)
+  assert.doesNotMatch(strict.summary, /script-mode finding/)
+})
+
+test('wolfram_check treats a plain standalone script as clean', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // Print plus a top-level CompoundExpression is a normal script, not an issue.
+  const result = await tools.get('wolfram_check').execute({ code: 'Print["Привет"]; g[x_] := x^2 + 1' }, {})
+  assert.equal(result.ok, true, result.summary)
+  assert.match(result.summary, /no issues/)
+  assert.doesNotMatch(result.summary, /\[TopLevelCompoundExpression\]/)
 })
 
 

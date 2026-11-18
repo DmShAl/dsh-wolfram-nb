@@ -825,9 +825,7 @@ export function apply(ctx, config = {}) {
         + (document?.coerced === true
           ? '\nNote: a cell returned a value that is not valid JSON, so the notebook payload was coerced to text.'
           : '')
-        + (consoleLogPath === undefined
-          ? ''
-          : `\nFull console: ${displayPath(context.cwd, consoleLogPath)}`)
+      // describeDocument already prints the single `Full log:` line with the path.
       return {
         ok: true,
         summary,
@@ -946,13 +944,11 @@ export function apply(ctx, config = {}) {
         } else {
           const hints = suggestFixes(response.console)
           const consoleText = String(response.console ?? '')
-          // The log file is written below, in `finally`, and referenced after the
-          // summary cap so that "Log: ..." survives even when the text is clipped.
+          // The truncation marker comes from describeDocument; the log file is written
+          // below, in `finally`, and its path is appended after the summary cap so that
+          // "Log: ..." survives even when the text is clipped.
           job.summary = describeDocument(document, { console: consoleText, panel: false })
             + (hints.length === 0 ? '' : `\nSuggested fix: ${hints.join(' ')}`)
-          if (consoleText.length > CONSOLE_LIMIT) {
-            job.summary += `\n[console truncated: ${consoleText.length} chars total]`
-          }
           const hasGraphics = Array.isArray(document?.cells)
             && document.cells.some((cell) => cell.kind === 'graphics' || cell.kind === 'image')
           if (hasGraphics) {
@@ -1905,7 +1901,7 @@ export function apply(ctx, config = {}) {
     Print["${CHECK_MARKER}" <> "{\\"ok\\":false,\\"error\\":\\"the code could not be parsed\\"}"],
     findings = Map[Function[o, With[{src = Cases[o[[4]], {a_Integer, b_Integer}, Infinity]},
         <|"tag" -> o[[1]], "severity" -> o[[3]], "message" -> o[[2]],
-          "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[500]]];
+          "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[2000]]];
     tags = Map[{#[[1]], #[[2]]} &, Tally[Map[#[[1]] &, res]]];
     Print["${CHECK_MARKER}" <> StringReplace[ExportString[
       <|"ok" -> True, "count" -> Length[res], "findings" -> findings, "tags" -> tags|>, "JSON"], "\\n" -> ""]]]
@@ -1914,32 +1910,45 @@ export function apply(ctx, config = {}) {
       if (payload.ok !== true) {
         return { ok: false, count: 0, summary: `CodeInspector: ${payload.error ?? 'failed'}` }
       }
+      const total = Number(payload.count) || 0
       const findings = Array.isArray(payload.findings) ? payload.findings : []
       const tags = Array.isArray(payload.tags) ? payload.tags : []
-      // A standalone script legitimately uses Print/Set/Clear and Cyrillic strings
-      // and comments; CodeInspector reports both as noise, which buried the real
-      // errors (970 findings on a task script). strict: true keeps everything.
-      const SCRIPT_NOISE = new Set(['SuspiciousSessionSymbol', 'NonASCIICharacter'])
-      const isScriptNoise = (finding) => SCRIPT_NOISE.has(String(finding?.tag ?? ''))
-      const hidden = strict ? [] : findings.filter(isScriptNoise)
-      const visible = strict ? findings : findings.filter((finding) => !isScriptNoise(finding))
+      // A standalone script legitimately uses Print/Set/Clear, Cyrillic strings and a
+      // top-level CompoundExpression; CodeInspector reports them as noise, which buried
+      // the real errors (2102 findings on a task probe). strict: true keeps everything.
+      const SCRIPT_NOISE = new Set(['SuspiciousSessionSymbol', 'NonASCIICharacter', 'TopLevelCompoundExpression'])
+      const noiseTags = [...SCRIPT_NOISE]
+      // Campaign counts add up because they come from the full tag tally, not from the
+      // bounded findings array: "Hidden 500" was wrong when the code had 807 findings.
+      const countOf = (tag) => {
+        const entry = tags.find((pair) => String(pair?.[0] ?? '') === tag)
+        return Number(entry?.[1]) || 0
+      }
+      const hiddenTotal = noiseTags.reduce((sum, tag) => sum + countOf(tag), 0)
+      const visibleTotal = strict ? total : total - hiddenTotal
+      const visible = strict
+        ? findings
+        : findings.filter((finding) => !SCRIPT_NOISE.has(String(finding?.tag ?? '')))
       const shown = visible.slice(0, limit)
       const label = inspected === 'code' ? 'CodeInspector' : `CodeInspector (${inspected})`
-      const lines = [visible.length === 0
-        ? `${label}: no issues${hidden.length > 0 ? ` (${hidden.length} script-mode finding(s) hidden)` : ''}.`
-        : `${label}: ${visible.length} issue(s).`]
+      const hiddenNote = !strict && hiddenTotal > 0 ? ` (${hiddenTotal} script-mode finding(s) hidden)` : ''
+      const lines = [visibleTotal === 0
+        ? `${label}: no issues${hiddenNote}.`
+        : `${label}: ${visibleTotal} issue(s)${hiddenNote}.`]
       for (const finding of shown) {
         const where = finding.line > 0 ? `line ${finding.line}` : 'code'
         lines.push(`  ${where}  ${String(finding.severity ?? '?').padEnd(8)} ${String(finding.message ?? '').trim()} [${finding.tag ?? '?'}]`)
       }
-      if (visible.length > shown.length) lines.push(`  … ${visible.length - shown.length} more (raise limit)`)
+      if (visibleTotal > shown.length) {
+        lines.push(`  … ${visibleTotal - shown.length} more (showing ${shown.length} of ${visibleTotal}; raise limit)`)
+      }
       if (tags.length > 0) {
         lines.push(`Tags: ${tags.map(([tag, count]) => `${tag} ×${count}`).join(', ')}`)
       }
-      if (hidden.length > 0) {
-        lines.push(`Hidden ${hidden.length} script-mode finding(s) (SuspiciousSessionSymbol, NonASCIICharacter): Print/Set/Clear and Cyrillic text in a standalone script are expected; pass strict: true to see them.`)
+      if (hiddenNote !== '') {
+        lines.push(`Hidden ${hiddenTotal} script-mode finding(s) (SuspiciousSessionSymbol, NonASCIICharacter, TopLevelCompoundExpression): Print/Set/Clear, Cyrillic text and a top-level CompoundExpression in a standalone script are expected; pass strict: true to see them.`)
       }
-      return { ok: visible.length === 0, count: visible.length, summary: lines.join('\n') }
+      return { ok: visibleTotal === 0, count: visibleTotal, summary: lines.join('\n') }
     },
   }
 

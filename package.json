@@ -1,6 +1,6 @@
 {
   "name": "dsh-wolfram-nb",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"

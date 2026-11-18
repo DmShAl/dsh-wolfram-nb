@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.16.1 — 2026-11-19
+
+Follow-up to the 1.16.0 acceptance (bridge stays 1.3.4; these are host-side fixes).
+
+### Fixed
+
+- **`wolfram_check` counters are consistent with the tag tally (B2).** The findings array is capped
+  for JSON, but the header, `Hidden` and `more` numbers now come from the full tag tally:
+  `hidden = sum of SCRIPT_NOISE tag counts`, `visibleTotal = count − hidden`, `limit` applies to
+  display only, and `ok` is `visibleTotal === 0`. A task script with 807 findings used to report
+  "no issues (500 script-mode finding(s) hidden)" while `Tags:` added up to 807; `strict: true`
+  now shows the full count (capped findings raised from 500 to 2000, well above the display limit).
+- **One truncation marker in a job summary (B1).** `[console truncated: N chars total]` was added
+  both by `describeDocument` and by `startJob`; `startJob` no longer adds a second one.
+- **One log path line in `wolfram_eval` (B3).** The summary printed both `Full log:` and
+  `Full console:` for the same `.dsh-wolfram/tmp/last-console.log`; it now prints `Full log:` once.
+- **`TopLevelCompoundExpression` is script-mode noise (B4).** A normal standalone script such as
+  `Print["Привет"]; g[x_] := x^2 + 1` reported one visible Remark and `ok: false`; the tag is now
+  hidden by default like the other script-mode noise and still shown by `strict: true`.
+  `UnusedParameter` stays visible — it is a useful signal.
+
+### Tests
+
+- 68 tests: counters add up on a large finding set (840 hidden instead of the old 500, visible 2,
+  strict total matches `Tags:`), a plain standalone script is clean, one truncation marker per job,
+  one log path line per eval.
+
 ## 1.16.0 — 2026-11-19
 
 ### Fixed
