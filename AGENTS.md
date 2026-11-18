@@ -7,11 +7,12 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.13.1** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.13.2** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
-  `dsh plugin --profile desktop add file:<tgz>`. Подробности в `INSTALL.md`.
-- Тесты: `npm test` (node --test, живое ядро, 49 тестов, ~90 с); приёмка установленной
+  `dsh plugin remove` + `add file:<tgz>` (сначала удаление: pnpm иначе оставляет файлы
+  прежней сборки с тем же номером версии). Подробности в `INSTALL.md`.
+- Тесты: `npm test` (node --test, живое ядро, 53 теста, ~97 с); приёмка установленной
   сборки — `node scripts/smoke.mjs` (11 шагов, ~10 с). `npm.cmd` доступен
   (`C:\Program Files\nodejs`), Node v24.21.0.
 

@@ -24,6 +24,23 @@ const EXPORT_DIR = 'wolfram-notebooks'
 const BRIDGE_VERSION = '1.3.3'
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
+
+/**
+ * Newest `.dsh-wolfram/state-<timestamp>.mx` in a workspace, or null.
+ * Only the tool's own `state-YYYYMMDD-HHMMSS.mx` names count: a user-chosen
+ * `state-test.mx` sorts after them and is not "the last save".
+ */
+function latestStateFile(cwd) {
+  const dir = join(cwd, PUBLISH_DIR)
+  try {
+    const names = readdirSync(dir)
+      .filter((name) => /^state-\d{8}-\d{6}\.mx$/.test(name))
+      .sort()
+    return names.length === 0 ? null : join(dir, names[names.length - 1])
+  } catch {
+    return null
+  }
+}
 const DEFAULT_MAX_RUNNING_JOBS = 4
 const DEFAULT_BATCH_PARALLEL = 4
 const MAX_BATCH = 12
@@ -415,7 +432,7 @@ class WolframKernel {
     // WolframBridge` definitions). Waiting the full evaluation timeout for that
     // case used to cost minutes; fail fast and let the next call restart.
     const startTimeoutMs = Math.max(5_000, Math.min(timeoutMs, 20_000))
-    return new Promise((resolvePromise, rejectPromise) => {
+    const pending = new Promise((resolvePromise, rejectPromise) => {
       const startTimer = setTimeout(() => {
         clearTimeout(timer)
         this.waiters.delete(id)
@@ -454,6 +471,13 @@ class WolframKernel {
         this.waiters.delete(id)
         rejectPromise(error)
       }
+    })
+    // A timeout, a kernel restart or a failed write never reaches the @@WB_DOC@@
+    // branch, which is the only place that deleted these two files; without this
+    // .dsh-wolfram/tmp collected a request file per failed call.
+    return pending.finally(() => {
+      try { unlinkSync(requestPath) } catch { /* already gone */ }
+      try { unlinkSync(responsePath) } catch { /* already gone */ }
     })
   }
 
@@ -1414,13 +1438,13 @@ export function apply(ctx, config = {}) {
       'Inspect or persist the state of the persistent kernel.',
       'action=status reports Global symbol count, memory, assumptions and packages.',
       'action=symbols lists definitions matching a name pattern.',
-      'action=save writes the Global context with DumpSave; action=load restores it. Both use `.dsh-wolfram/state-<timestamp>.mx` unless `path` is given.',
+      'action=save writes the Global context with DumpSave into `.dsh-wolfram/state-<timestamp>.mx`; action=load restores the newest such file unless `path` names one.',
     ].join(' '),
     parameters: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['status', 'symbols', 'save', 'load', 'clear'] },
-        path: { type: 'string', description: 'State file for save/load; defaults to .dsh-wolfram/state-<timestamp>.mx.' },
+        path: { type: 'string', description: 'State file for save/load; save defaults to .dsh-wolfram/state-<timestamp>.mx, load to the newest saved state.' },
         pattern: { type: 'string', description: 'Name pattern for action=symbols (default "Global`*").' },
         limit: { type: 'number', description: 'Maximum number of names to list (default 100).' },
       },
@@ -1466,10 +1490,11 @@ export function apply(ctx, config = {}) {
           summary: `${payload.count} name(s) matching ${pattern}:\n${(payload.names ?? []).join('\n')}`,
         }
       }
-      const file = resolveWorkspacePath(context.cwd, args?.path, join(PUBLISH_DIR, `state-${timestamp()}.mx`))
-      mkdirSync(dirname(file), { recursive: true })
-      const wlPath = wlString(file.replace(/\\/g, '/'))
+      const saveFile = () => resolveWorkspacePath(context.cwd, args?.path, join(PUBLISH_DIR, `state-${timestamp()}.mx`))
       if (action === 'save') {
+        const file = saveFile()
+        mkdirSync(dirname(file), { recursive: true })
+        const wlPath = wlString(file.replace(/\\/g, '/'))
         const code = `Module[{file = ${wlPath}, ok = False, bytes = 0},
   Quiet@Check[DumpSave[file, "Global\`"]; ok = FileExistsQ[file], ok = False];
   bytes = If[ok, FileByteCount[file], 0];
@@ -1486,6 +1511,18 @@ export function apply(ctx, config = {}) {
         }
       }
       if (action === 'load') {
+        // `load` without a path means "the last save", not "a file stamped now":
+        // a fresh timestamp could never exist.
+        const requested = String(args?.path ?? '').trim()
+        const file = requested === '' ? latestStateFile(context.cwd) : saveFile()
+        if (file === null) {
+          return {
+            ok: false,
+            summary: 'No saved kernel state in .dsh-wolfram — run wolfram_state action="save" first, or pass path.',
+            path: '',
+          }
+        }
+        const wlPath = wlString(file.replace(/\\/g, '/'))
         const code = `Module[{file = ${wlPath}, exists, res = $Failed},
   exists = FileExistsQ[file];
   If[exists, res = Quiet@Get[file]];
@@ -1935,16 +1972,23 @@ export function apply(ctx, config = {}) {
     async execute(args, exec) {
       const context = await kernelContext(exec)
       const cwd = context.cwd
-      const prepared = existsSync(join(cwd, 'AGENTS.md')) && existsSync(join(cwd, 'tools'))
+      const hasAgents = existsSync(join(cwd, 'AGENTS.md'))
+      const hasTools = existsSync(join(cwd, 'tools'))
+      const prepared = hasAgents && hasTools
+      const workspaceLine = prepared
+        ? 'Workspace: AGENTS.md and tools/ present'
+        : isInsideRepository(cwd)
+          // The repository carries both files for its own sessions; that does not
+          // make it a place for calculations.
+          ? 'Workspace: this is the plugin repository — run /initmath in a separate folder for calculations'
+          : `Workspace: missing ${[hasAgents ? '' : 'AGENTS.md', hasTools ? '' : 'tools/'].filter(Boolean).join(' and ')} — run /initmath to prepare this folder`
       const env = checkEnvironment()
       const found = env.filter((item) => item.ok).length
       const missing = env.filter((item) => !item.ok).map((item) => item.name)
       const gitInfo = gitState(cwd)
       const lines = [
         `${prepared ? 'Ready' : 'Not prepared'}: ${cwd}`,
-        prepared
-          ? 'Workspace: AGENTS.md and tools/ present'
-          : 'Workspace: no AGENTS.md/tools — run /initmath to prepare this folder',
+        workspaceLine,
         `Environment: ${found}/${env.length} OK${missing.length === 0 ? '' : ` (missing: ${missing.join(', ')})`}`,
         gitInfo.repo
           ? `Git: ${gitInfo.branch}, ${gitInfo.commits} commit(s), ${gitInfo.dirty ? 'uncommitted changes' : 'clean'}`

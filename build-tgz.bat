@@ -52,6 +52,9 @@ if defined DSH_HOME (
 )
 echo [build-tgz] installing into profile "%DSH_PROFILE%":
 echo   "%DSH_CLI%" plugin --profile "%DSH_PROFILE%" add "file:%TGZ_FWD%"
+rem Remove first: a rebuilt tarball with the same version otherwise stays at the
+rem files pnpm already has for that version, and the profile keeps running stale code.
+call "%DSH_CLI%" plugin --profile "%DSH_PROFILE%" remove %PKGNAME% >nul 2>nul
 call "%DSH_CLI%" plugin --profile "%DSH_PROFILE%" add "file:%TGZ_FWD%"
 if errorlevel 1 (
   echo.

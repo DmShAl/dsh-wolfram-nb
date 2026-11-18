@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.13.2 — 2026-11-18
+
+### Fixed
+
+- **`wolfram_state action="load"` without `path` actually loads.** It stamped a fresh timestamp
+  into the filename, so a load without a path could never find a file; it now restores the
+  newest `.dsh-wolfram/state-<timestamp>.mx` (a user-chosen name such as `state-test.mx` is not
+  "the last save").
+- **`wolfram_ready` says what is missing.** It used to answer "no AGENTS.md/tools" even when
+  `AGENTS.md` was present, and in the plugin repository it now says that this is not a
+  calculation folder instead.
+- **No leftover request files.** A timeout, a kernel restart or a failed write never reached the
+  cleanup branch, so `.dsh-wolfram/tmp` collected a `req-*.json` per failed call; the files are
+  now removed when the call settles.
+- **`/initmath` refuses the checkout from an installed plugin.** The check compared the target
+  with the *running* package directory, which in an installed copy lives in `node_modules`; the
+  repository is recognised by its `package.json` in an ancestor instead, so calculations still
+  cannot be started inside it.
+
+### Changed
+
+- Operators that Mathematica 15 stores in the private use area are transliterated too:
+  `\[Distributed]` (`x~dist`), `\[Conditioned]`, `\[Sum]`, `\[Product]`, `\[Limit]`,
+  `\[CenterEllipsis]`, thin/invisible spaces and the Greek alphabet (`\[Omega]` → `omega`,
+  `\[CapitalSigma]` → `Sigma`). A sweep of 63 built-in usage messages now contains no
+  dropped character.
+
+### Tests
+
+- 52 tests: state save/load round-trip without a path, the `wolfram_ready` wording, no request
+  file after a timeout, `x~dist` in `Probability` and `x->` in `Limit`.
+
 ## 1.13.1 — 2026-11-18
 
 ### Fixed

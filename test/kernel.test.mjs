@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, unlinkSync, existsSync, writeFileSync } from 'node:fs'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, unlinkSync, existsSync, writeFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -668,6 +668,18 @@ test('initmath scaffolds a folder outside the repository', (t) => {
   assert.throws(() => initMathWorkspace(join(root, 'some-task')), /plugin repository/)
 })
 
+test('isInsideRepository recognises the source checkout from an installed copy', (t) => {
+  // An installed plugin lives in node_modules, so its own path never matches the
+  // checkout; the manifest in an ancestor identifies the repository instead.
+  const checkout = mkdtempSync(join(tmpdir(), 'wl-checkout-'))
+  t.after(() => rmSync(checkout, { recursive: true, force: true }))
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'dsh-wolfram-nb', version: '0.0.0' }))
+  const task = join(checkout, 'task')
+  mkdirSync(task)
+  assert.equal(isInsideRepository(task), true)
+  assert.equal(isInsideRepository(join(checkout, '..')), false)
+})
+
 test('a cell that exits the kernel is reported and the next call recovers', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
   teardown(t, cleanups)
@@ -778,6 +790,42 @@ test('usage text keeps the operators the kernel stores as private-use characters
   // Table has no usage message in the kernel at all, which is not degradation.
   const table = await tools.get('wolfram_help').execute({ query: 'Table' }, {})
   assert.doesNotMatch(table.summary, /usage: degraded/)
+
+  // Distribution and formula operators are private-use characters as well.
+  const probability = await tools.get('wolfram_help').execute({ query: 'Probability' }, {})
+  assert.match(probability.summary, /x~dist/)
+  const limit = await tools.get('wolfram_help').execute({ query: 'Limit' }, {})
+  assert.match(limit.summary, /x->/)
+})
+
+test('wolfram_ready names the missing piece instead of a blanket answer', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // The repository has AGENTS.md but no tools/, and it is not a calculation
+  // folder at all; the tool used to say "no AGENTS.md/tools" either way.
+  const result = await tools.get('wolfram_ready').execute({}, {})
+  assert.equal(result.prepared, false)
+  assert.doesNotMatch(result.summary, /no AGENTS\.md\/tools/)
+  assert.match(result.summary, /plugin repository|missing/)
+})
+
+test('wolfram_state load without a path restores the newest save', async (t) => {  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const evalTool = tools.get('wolfram_eval')
+  const state = tools.get('wolfram_state')
+
+  await evalTool.execute({ code: 'stateRoundTrip = 41', exportNotebook: false }, {})
+  const saved = await state.execute({ action: 'save' }, {})
+  assert.equal(saved.ok, true)
+
+  await evalTool.execute({ code: 'stateRoundTrip = 0', exportNotebook: false }, {})
+  const loaded = await state.execute({ action: 'load' }, {})
+  assert.equal(loaded.ok, true)
+
+  const back = await evalTool.execute({ code: 'stateRoundTrip + 1', exportNotebook: false }, {})
+  assert.match(back.summary, /42/)
 })
 
 test('reference-page details keep the operators and the cells', async (t) => {
@@ -809,6 +857,30 @@ test('a documentation root that only has the symbol section still resolves', asy
   const result = await tools.get('wolfram_doc').execute({ symbol: 'CSV' }, {})
   assert.equal(result.ok, true)
   assert.match(result.summary, /CSV/)
+})
+
+test('a timed-out evaluation leaves no request file behind', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const tmpDir = join(process.cwd(), '.dsh-wolfram', 'tmp')
+  const countRequests = () => {
+    try {
+      return readdirSync(tmpDir).filter((name) => /^req-.*\.json$/.test(name)).length
+    } catch {
+      return 0
+    }
+  }
+
+  const before = countRequests()
+  await assert.rejects(
+    () => tools.get('wolfram_eval').execute({ code: 'Pause[10]; 1', timeoutMs: 800 }, {}),
+    (error) => {
+      assert.match(error.message, /timed out/i)
+      return true
+    },
+  )
+  assert.equal(countRequests(), before)
 })
 
 

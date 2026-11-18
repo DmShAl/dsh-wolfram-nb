@@ -8,7 +8,7 @@
 //
 // Also used by the `/initmath` DSH command, so the same code runs both from the
 // command line and from inside a session.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -18,11 +18,21 @@ import { resolveKernel } from './kernel-discovery.js'
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const TEMPLATE_DIR = join(HERE, 'workspace')
 
-/** The plugin repository itself: calculations must not be started inside it. */
+/** A directory is the plugin repository if it is this package, or if any parent
+    carries this package's manifest — an installed copy lives in node_modules, so
+    comparing paths alone missed the source checkout. */
 export function isInsideRepository(path) {
   const target = resolve(path)
   const root = resolve(HERE)
-  return target === root || target.startsWith(root + sep)
+  if (target === root || target.startsWith(root + sep)) return true
+  for (let dir = target; ; dir = dirname(dir)) {
+    try {
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      if (manifest?.name === 'dsh-wolfram-nb') return true
+    } catch { /* no readable manifest here */ }
+    const parent = dirname(dir)
+    if (parent === dir) return false
+  }
 }
 
 function listFiles(dir, base = dir) {

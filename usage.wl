@@ -120,13 +120,17 @@ wuIsland[body_String] := Module[{inner, held, result},
    code point; unknown characters still fall back to being dropped. *)
 
 $wuNameMap = <|
-  "Ellipsis" -> "...", "CenterDot" -> "...", "VerticalEllipsis" -> "...",
-  "Integral" -> "Integral ", "Element" -> " in ", "NotElement" -> " not in ",
+  "Ellipsis" -> "...", "CenterEllipsis" -> "...", "CenterDot" -> "...",
+  "VerticalEllipsis" -> "...",
+  "Integral" -> "Integral ", "ContourIntegral" -> "ContourIntegral ",
+  "Sum" -> "Sum ", "Product" -> "Product ", "Limit" -> "Limit ",
+  "Element" -> " in ", "NotElement" -> " not in ",
   "LessEqual" -> "<=", "GreaterEqual" -> ">=", "LessSlantEqual" -> "<=",
   "GreaterSlantEqual" -> ">=", "NotEqual" -> "!=", "Equal" -> "==",
   "LongEqual" -> "==", "Congruent" -> "===", "Rule" -> "->", "RuleDelayed" -> ":>",
   "RightArrow" -> "->", "LeftArrow" -> "<-", "LeftRightArrow" -> "<->",
   "DoubleRightArrow" -> "=>", "DoubleLeftRightArrow" -> "<=>",
+  "Distributed" -> "~", "Conditioned" -> "|",
   "Times" -> "x", "Minus" -> "-", "PlusMinus" -> "+/-", "MinusPlus" -> "-/+",
   "Divide" -> "/", "PartialD" -> "d", "Infinity" -> "Infinity",
   "Approximate" -> "~", "TildeEqual" -> "~", "Proportional" -> "~",
@@ -134,7 +138,21 @@ $wuNameMap = <|
   "Equivalent" -> "<=>", "ForAll" -> " for all ", "Exists" -> " there exists ",
   "LeftDoubleBracket" -> "[[", "RightDoubleBracket" -> "]]",
   "LeftAssociation" -> "<|", "RightAssociation" -> "|>",
-  "MiddleDot" -> " ", "Degree" -> " degrees ", "Prime" -> "'", "Transpose" -> "T"
+  "MiddleDot" -> " ", "Degree" -> " degrees ", "Prime" -> "'", "Transpose" -> "T",
+  "ThinSpace" -> " ", "InvisibleSpace" -> "", "InvisibleApplication" -> "",
+  "InvisibleComma" -> "",
+  (* Greek letters show up in formulas on most reference pages; the names are
+     transliterated so a formula stays readable instead of losing a factor. *)
+  "Alpha" -> "alpha", "Beta" -> "beta", "Gamma" -> "gamma", "Delta" -> "delta",
+  "Epsilon" -> "epsilon", "Zeta" -> "zeta", "Eta" -> "eta", "Theta" -> "theta",
+  "Iota" -> "iota", "Kappa" -> "kappa", "Lambda" -> "lambda", "Mu" -> "mu",
+  "Nu" -> "nu", "Xi" -> "xi", "Omicron" -> "omicron", "Pi" -> "pi",
+  "Rho" -> "rho", "Sigma" -> "sigma", "Tau" -> "tau", "Upsilon" -> "upsilon",
+  "Phi" -> "phi", "Chi" -> "chi", "Psi" -> "psi", "Omega" -> "omega",
+  "CapitalAlpha" -> "Alpha", "CapitalBeta" -> "Beta", "CapitalGamma" -> "Gamma",
+  "CapitalDelta" -> "Delta", "CapitalTheta" -> "Theta", "CapitalLambda" -> "Lambda",
+  "CapitalXi" -> "Xi", "CapitalPi" -> "Pi", "CapitalSigma" -> "Sigma",
+  "CapitalPhi" -> "Phi", "CapitalPsi" -> "Psi", "CapitalOmega" -> "Omega"
 |>;
 
 wuNonAscii = RegularExpression["[^\\x00-\\x7F]"];
