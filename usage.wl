@@ -26,18 +26,31 @@ $wuOpen = "\:f7c9";
 $wuClose = "\:f7c0";
 $wuStar = "\:f7c8";
 
-ClearAll[wuFlat, wuSplit, wuIsland, wuUsgText];
+ClearAll[wuFlat, wuSplit, wuIsland, wuUsgText, wuAscii, wuCharAscii, wuNamedChar,
+  wuNonAscii, $wuNameMap, $wuAsciiChars];
 SetAttributes[wuFlat, HoldAllComplete];
 
 wuFlat[RowBox[list_List]] := StringJoin[wuFlat /@ list];
-wuFlat[(StyleBox | FormBox | TagBox | AdjustmentBox | TooltipBox | ButtonBox | PaneBox)[body_, ___]] := wuFlat[body];
+wuFlat[(StyleBox | FormBox | TagBox | AdjustmentBox | TooltipBox | ButtonBox |
+  PaneBox | FrameBox)[body_, ___]] := wuFlat[body];
 wuFlat[InterpretationBox[body_, ___]] := wuFlat[body];
 wuFlat[SubscriptBox[a_, b_]] := wuFlat[a] <> "_" <> wuFlat[b];
 wuFlat[SuperscriptBox[a_, b_]] := wuFlat[a] <> "^" <> wuFlat[b];
 wuFlat[SubsuperscriptBox[a_, b_, c_]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
+wuFlat[OverscriptBox[a_, b_]] := wuFlat[a] <> "^" <> wuFlat[b];
+wuFlat[UnderscriptBox[a_, b_]] := wuFlat[a] <> "_" <> wuFlat[b];
+wuFlat[UnderoverscriptBox[a_, b_, c_]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
 wuFlat[FractionBox[a_, b_]] := wuFlat[a] <> "/" <> wuFlat[b];
 wuFlat[SqrtBox[a_]] := "sqrt(" <> wuFlat[a] <> ")";
-wuFlat[TemplateBox[args_List, ___]] := wuFlat[First[args]];
+(* Inline artwork in a details table carries no words; drop it instead of failing
+   the whole cell. *)
+wuFlat[(GraphicsBox | Graphics3DBox)[___]] := "";
+(* Interactive controls in a details table: the prose around them says the same. *)
+wuFlat[(CheckboxBox | RadioButtonBox | PopupMenuBox | SliderBox)[___]] := "";
+(* HoldAllComplete keeps box arguments unevaluated, so anything computed from a
+   pattern variable must be computed first: `wuFlat[First[args]]` would never
+   run First and would fall through to the unknown-head rule. *)
+wuFlat[TemplateBox[args_List, ___]] := With[{first = First[args]}, wuFlat[first]];
 wuFlat[TextData[content_]] := If[ListQ[content], StringJoin[wuFlat /@ content], wuFlat[content]];
 wuFlat[GridBox[rows_List, ___]] := StringRiffle[
   Select[
@@ -52,6 +65,8 @@ wuFlat[GridBox[rows_List, ___]] := StringRiffle[
 wuFlat[Cell[body_, ___]] := wuFlat[body];
 wuFlat[BoxData[body_]] := wuFlat[body];
 wuFlat[s_String] := s;
+(* Example jump links carry their number as a plain integer. *)
+wuFlat[n_Integer] := ToString[n];
 wuFlat[unknown_] := Throw[Fail[ToString[Head[unknown]]], "usage"];
 
 wuSplit[s_String] := Module[{chars, n, i = 1, out = {}, buf = "", j, depth, body},
@@ -94,19 +109,52 @@ wuIsland[body_String] := Module[{inner, held, result},
 ];
 
 (* The bridge writes JSON to stdout; a non-ASCII character is escaped by the
-   kernel as \[Name]/\\ddd, which is not valid JSON. Transliterate by character
-   code (escapes, not literals: the source file encoding is not guaranteed) and
-   drop whatever is left. *)
-wuAscii[s_String] := StringReplace[s, Join[
-  Thread[{
-    "\:2026", "\:22ef", "\:22ee", "\:22f0", "\:22f1", "\:2024", "\:2025",
-    "\:222b", "\:2208", "\:2264", "\:2265", "\:2192", "\:2260", "\:00d7",
-    "\:2212", "\:2013", "\:2014", "\:2202", "\:221e", "\:2248", "\:2200"} ->
-   {"...", "...", "...", "...", "...", "...", "...",
-    "Integral ", " in ", "<=", ">=", "->", "!=", "x",
-    "-", "-", "-", "d", "Infinity", "~", "for all "}],
-  {RegularExpression["[^\\x00-\\x7F]"] -> ""}
-]];
+   kernel as \[Name]/\\ddd, which is not valid JSON, so the text has to become
+   ASCII. Code points are not stable: Mathematica 15 moved several operators into
+   the private use area (\[Equal] is U+F431, \[Rule] U+F522, ...), and the old
+   "drop every non-ASCII character" rule silently deleted exactly the symbols that
+   carry meaning in a definition ("u[x]==a" came out as "u[x]a"). Each name below
+   is resolved to whatever character this kernel uses, so the table never needs a
+   code point; unknown characters still fall back to being dropped. *)
+
+$wuNameMap = <|
+  "Ellipsis" -> "...", "CenterDot" -> "...", "VerticalEllipsis" -> "...",
+  "Integral" -> "Integral ", "Element" -> " in ", "NotElement" -> " not in ",
+  "LessEqual" -> "<=", "GreaterEqual" -> ">=", "LessSlantEqual" -> "<=",
+  "GreaterSlantEqual" -> ">=", "NotEqual" -> "!=", "Equal" -> "==",
+  "LongEqual" -> "==", "Congruent" -> "===", "Rule" -> "->", "RuleDelayed" -> ":>",
+  "RightArrow" -> "->", "LeftArrow" -> "<-", "LeftRightArrow" -> "<->",
+  "DoubleRightArrow" -> "=>", "DoubleLeftRightArrow" -> "<=>",
+  "Times" -> "x", "Minus" -> "-", "PlusMinus" -> "+/-", "MinusPlus" -> "-/+",
+  "Divide" -> "/", "PartialD" -> "d", "Infinity" -> "Infinity",
+  "Approximate" -> "~", "TildeEqual" -> "~", "Proportional" -> "~",
+  "And" -> "&&", "Or" -> "||", "Not" -> "!", "Implies" -> " implies ",
+  "Equivalent" -> "<=>", "ForAll" -> " for all ", "Exists" -> " there exists ",
+  "LeftDoubleBracket" -> "[[", "RightDoubleBracket" -> "]]",
+  "LeftAssociation" -> "<|", "RightAssociation" -> "|>",
+  "MiddleDot" -> " ", "Degree" -> " degrees ", "Prime" -> "'", "Transpose" -> "T"
+|>;
+
+wuNonAscii = RegularExpression["[^\\x00-\\x7F]"];
+
+(* "\[Equal]" in source is the operator itself, so the escape is assembled from
+   characters; a name this version does not know yields a string, not a character. *)
+wuNamedChar[name_String] := Module[{ch},
+  ch = Quiet@Check[ToExpression[StringJoin["\"", "\\[", name, "]\""]], $Failed];
+  If[StringQ[ch] && StringLength[ch] === 1, ch, $Failed]];
+
+(* Characters this kernel uses for the names above; invalid names are ignored. *)
+$wuAsciiChars = Association[DeleteCases[
+  Map[
+    With[{ch = wuNamedChar[#[[1]]]},
+      If[StringQ[ch], ch -> #[[2]], Nothing]] &,
+    Normal[$wuNameMap]],
+  Nothing]];
+
+wuCharAscii[c_String] := If[StringFreeQ[c, wuNonAscii], c,
+  Lookup[$wuAsciiChars, c, ""]];
+
+wuAscii[s_String] := StringJoin[Map[wuCharAscii, Characters[s]]];
 
 wuUsgText[sym_Symbol] := Module[{raw, parts, pieces, result, degraded = False},
   raw = Quiet@Check[MessageName[sym, "usage"], $Failed];

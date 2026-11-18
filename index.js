@@ -1811,11 +1811,24 @@ export function apply(ctx, config = {}) {
 
   const referencePagePath = (symbol) => {
     for (const root of documentationRoots()) {
-      const page = join(root, 'System', 'ReferencePages', 'Symbols', `${symbol}.nb`)
-      if (existsSync(page)) return page
+      const pages = join(root, 'System', 'ReferencePages')
+      const direct = join(pages, 'Symbols', `${symbol}.nb`)
+      if (existsSync(direct)) return direct
+      // Not every page is a symbol page: Formats/, Messages/ etc. share the layout.
+      try {
+        for (const section of readdirSync(pages)) {
+          const candidate = join(pages, section, `${symbol}.nb`)
+          if (existsSync(candidate)) return candidate
+        }
+      } catch { /* no ReferencePages section: keep looking */ }
     }
     return null
   }
+
+  /** Flattened reference-page text per symbol; pages are 10 MB, the text is small. */
+  const docCache = new Map()
+  const DOC_CACHE_LIMIT = 64
+  const DOC_TEXT_LIMIT = 6000
 
   const DOC_MARKER = '@@WB_DOCPAGE@@'
   const wolframDoc = {
@@ -1844,6 +1857,19 @@ export function apply(ctx, config = {}) {
       const symbol = String(args?.symbol ?? '').trim()
       if (symbol === '') throw new Error('wolfram_doc needs `symbol`.')
       const maxChars = Math.max(200, Math.min(6000, Math.floor(Number(args?.maxChars) || 1200)))
+      const docNote = (failed) => failed > 0
+        ? `\n(${failed} detail cell(s) could not be flattened)`
+        : ''
+      const cached = docCache.get(symbol)
+      if (cached !== undefined) {
+        return {
+          ok: cached.text !== '',
+          symbol,
+          summary: cached.text === ''
+            ? `${symbol}: the reference page has no details section.`
+            : `${symbol} — details (${Math.min(cached.text.length, maxChars)} chars):\n${cached.text.slice(0, maxChars)}${docNote(cached.failed)}`,
+        }
+      }
       const page = referencePagePath(symbol)
       if (page === null) {
         return {
@@ -1852,15 +1878,19 @@ export function apply(ctx, config = {}) {
           summary: `${symbol}: no reference page found under ${join('%LOCALAPPDATA%', 'Programs', 'Common', 'Wolfram Research', 'Documentation.en-us')}`,
         }
       }
-      const cell = `Module[{nb = Quiet@Check[Import[${wlString(page.replace(/\\/g, '/'))}], $Failed], cells, text},
-  cells = If[Head[nb] === Notebook,
+      // The cache keeps up to DOC_TEXT_LIMIT characters; maxChars only slices the reply.
+      const cell = `Module[{nb = Quiet@Check[Import[${wlString(page.replace(/\\/g, '/'))}], $Failed], raw, cells, failed = 0, text},
+  raw = If[Head[nb] === Notebook,
     Cases[nb, Cell[bd_, s_String, ___] /; MemberQ[{"Notes", "2ColumnTableMod",
-      "3ColumnTableMod", "3ColumnIllustratedTableMod"}, s] :> Quiet@Check[Catch[wuFlat[bd], "usage"], ""], Infinity],
+      "3ColumnTableMod", "3ColumnIllustratedTableMod"}, s] :> bd, Infinity],
     {}];
+  cells = Map[Quiet@Check[Catch[wuFlat[#], "usage"], $Failed] &, raw];
+  failed = Count[cells, Fail[_] | $Failed];
   cells = Select[cells, StringQ[#] && StringTrim[#] =!= "" &];
   text = wuAscii[StringJoin[Riffle[cells, " "]]];
   Print["${DOC_MARKER}" <> StringReplace[ExportString[<|"ok" -> True, "symbol" -> ${wlString(symbol)},
-    "cells" -> Length[cells], "text" -> StringTake[text, UpTo[${maxChars}]]|>, "JSON"], "\\n" -> ""]]
+    "cells" -> Length[cells], "failed" -> failed,
+    "text" -> StringTake[text, UpTo[${DOC_TEXT_LIMIT}]]|>, "JSON"], "\\n" -> ""]]
   ]`
       const usagePrelude = `Get[${wlString(join(HERE, 'usage.wl').replace(/\\/g, '/'))}];`
       const payload = await evaluateMarked(context, cell, DOC_MARKER, usagePrelude)
@@ -1868,12 +1898,15 @@ export function apply(ctx, config = {}) {
         return { ok: false, symbol, summary: `${symbol}: ${payload.error ?? 'no documentation'}` }
       }
       const text = String(payload.text ?? '').trim()
+      const failed = Number(payload.failed ?? 0)
+      docCache.set(symbol, { text, failed })
+      if (docCache.size > DOC_CACHE_LIMIT) docCache.delete(docCache.keys().next().value)
       return {
         ok: text !== '',
         symbol,
         summary: text === ''
           ? `${symbol}: the reference page has no details section.`
-          : `${symbol} — details (${text.length} chars):\n${text}`,
+          : `${symbol} — details (${Math.min(text.length, maxChars)} chars):\n${text.slice(0, maxChars)}${docNote(failed)}`,
       }
     },
   }

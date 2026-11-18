@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.13.0 — 2026-11-18
+
+### Fixed
+
+- **Operators survive the flattening.** Mathematica 15 keeps several operators in the private
+  use area (`\[Equal]` is U+F431, `\[Rule]` U+F522, `\[RuleDelayed]` U+F51F, `\[LongEqual]`
+  U+F7D9), and the transliteration step dropped every non-ASCII character — so `wolfram_doc`
+  answered `{{uf},...}` and `u[x_1]a` instead of `{{u->f},...}` and `u[x_1]==a`, and usage text
+  could lose the same symbols. Characters are now resolved through their names (`Equal` →
+  `==`, `Rule` → `->`, ...), so no code point is written down and a version that moves them
+  again keeps working.
+- **`TemplateBox` content is actually flattened.** `wuFlat` is `HoldAllComplete`, so the old
+  `wuFlat[First[args]]` never evaluated `First` and fell through to the unknown-head rule: every
+  reference-page cell with an inline link or a template box was dropped whole. The details pages
+  now flatten completely (DSolve 6 → 19 cells, Plot 33 → 38, Dataset 76 → 77).
+- **More boxes are understood**: `FrameBox`, `OverscriptBox`, `UnderscriptBox`,
+  `UnderoverscriptBox`, integer arguments (example jump links). Decorative `GraphicsBox` and
+  interactive controls flatten to an empty string instead of failing the cell.
+
+### Added
+
+- **Page cache in `wolfram_doc`.** A flattened page is kept per symbol (64 entries, 6000
+  characters each), so a second call for the same symbol is instant; `maxChars` only slices the
+  reply.
+- **All reference-page sections are searched**, not just `Symbols/`: formats (`CSV`, `PNG`),
+  messages and the other sections live in sibling directories and used to answer "no page".
+- `wolfram_doc` reports how many detail cells could not be flattened, instead of silently
+  dropping them.
+
+### Tests
+
+- 49 tests: usage text keeps `pos_1->v_1`; the DSolve page keeps `u->f` and `u[x_1]==a` without
+  degraded cells and is served from the cache on the second call; a `Formats` page resolves.
+
 ## 1.12.1 — 2026-11-18
 
 ### Fixed

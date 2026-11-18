@@ -33,6 +33,13 @@ function teardown(t, cleanups) {
   t.after(() => { for (const cleanup of cleanups) cleanup() })
 }
 
+/** The per-user documentation is optional on a fresh machine; doc tests skip without it. */
+function documentationAvailable() {
+  const local = process.env.LOCALAPPDATA
+  if (typeof local !== 'string' || local === '') return false
+  return existsSync(join(local, 'Programs', 'Common', 'Wolfram Research', 'Documentation.en-us'))
+}
+
 test('kernelArgs are passed to the kernel process', async (t) => {
   const { tools, cleanups } = makeHarness({ kernelArgs: ['-pacletreadonly'], timeoutMs: 60_000 })
   teardown(t, cleanups)
@@ -750,6 +757,48 @@ test('a .nb file is written only when exportNotebook is true', async (t) => {
   assert.notEqual(saved.notebookPath, '')
   assert.equal(existsSync(saved.notebookPath), true)
   unlinkSync(saved.notebookPath)
+})
+
+test('usage text keeps the operators the kernel stores as private-use characters', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // Mathematica 15 moved \[Rule] to U+F522 and \[Equal] to U+F431, so a
+  // "drop every non-ASCII character" transliteration turned pos_1->v_1 into
+  // pos_1v_1. The flattener now resolves characters by name instead.
+  const result = await tools.get('wolfram_help').execute({ query: 'SparseArray' }, {})
+  assert.match(result.summary, /pos_1->v_1/)
+})
+
+test('reference-page details keep the operators and the cells', async (t) => {
+  if (!documentationAvailable()) return t.skip('documentation is not installed')
+
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_doc').execute({ symbol: 'DSolve', maxChars: 6000 }, {})
+  assert.match(result.summary, /u->f/)
+  assert.match(result.summary, /u\[x_1\]==a/)
+  assert.doesNotMatch(result.summary, /could not be flattened/)
+
+  // The flattened page text is cached per symbol, so a second call is served
+  // from the cache and must return the same text, only sliced to maxChars.
+  const bodyOf = (summary) => summary.slice(summary.indexOf('\n') + 1)
+  const again = await tools.get('wolfram_doc').execute({ symbol: 'DSolve', maxChars: 400 }, {})
+  assert.equal(again.ok, true)
+  assert.equal(bodyOf(again.summary), bodyOf(result.summary).slice(0, 400))
+})
+
+test('a documentation root that only has the symbol section still resolves', async (t) => {
+  if (!documentationAvailable()) return t.skip('documentation is not installed')
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // Formats live outside ReferencePages/Symbols; the lookup keeps walking the
+  // other sections instead of reporting "no reference page".
+  const result = await tools.get('wolfram_doc').execute({ symbol: 'CSV' }, {})
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /CSV/)
 })
 
 
