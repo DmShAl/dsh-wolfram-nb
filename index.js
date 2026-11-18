@@ -22,6 +22,10 @@ const LATEST_NAME = 'latest.json'
 const EXPORT_DIR = 'wolfram-notebooks'
 
 const BRIDGE_VERSION = '1.3.3'
+/** The installed build, so a session can tell which version it is actually running. */
+const PLUGIN_VERSION = (() => {
+  try { return String(JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version ?? 'n/a') } catch { return 'n/a' }
+})()
 const DEFAULT_TIMEOUT_MS = 180_000
 const MAX_JOBS = 20
 
@@ -841,7 +845,7 @@ export function apply(ctx, config = {}) {
           ? ''
           : ` Args: ${kernel.kernelArgs.length === 0 ? 'none' : kernel.kernelArgs.join(' ')}. Timeout: ${Math.round(kernel.timeoutMs / 1000)} s.`
         const mismatch = kernel?.bridgeMismatch ? ` (version mismatch allowed: ${kernel.bridgeMismatch})` : ''
-        const bridge = ` Bridge: ${kernel?.bridgeVersion ?? 'n/a'}${mismatch} (Mathematica ${kernel?.kernelVersion ?? 'n/a'}). Evaluations: ${stats.evaluations}, timeouts: ${stats.timeouts}, restarts: ${stats.restarts}.`
+        const bridge = ` Plugin ${PLUGIN_VERSION}, bridge: ${kernel?.bridgeVersion ?? 'n/a'}${mismatch} (Mathematica ${kernel?.kernelVersion ?? 'n/a'}). Evaluations: ${stats.evaluations}, timeouts: ${stats.timeouts}, restarts: ${stats.restarts}.`
         const summary = kernel === undefined
           ? `No kernel is running for this session (${context.cwd}). ${discovery}${bridge}`
           : `Wolfram kernel pid ${kernel.pid ?? 'n/a'} in ${context.cwd}. ${discovery}${runtime}${bridge} Notebook documents go to ${join(context.cwd, PUBLISH_DIR, LATEST_NAME)}.`
@@ -937,6 +941,7 @@ export function apply(ctx, config = {}) {
     description: [
       'Run a Wolfram Language evaluation as a background job in its own kernel.',
       'action=submit starts a job and returns its id; status/result/cancel/list manage it.',
+      'action=result takes `wait` (seconds, up to 300) and blocks until the job finishes instead of reporting "still running".',
       'Use it for long computations that would otherwise hit the 180 s per-call timeout.',
     ].join(' '),
     parameters: {
@@ -961,6 +966,7 @@ export function apply(ctx, config = {}) {
         title: { type: 'string', description: 'Job title / notebook title.' },
         timeoutMs: { type: 'number', description: 'Job timeout in milliseconds (default 30 min).' },
         exportNotebook: { type: 'boolean', description: 'Write a .nb file for the job result (default false).' },
+        wait: { type: 'number', description: 'action="result": seconds to wait for a running job (max 300, default 0).' },
       },
       required: ['action'],
     },
@@ -1078,8 +1084,18 @@ export function apply(ctx, config = {}) {
         return { ok: true, summary: `Job ${job.id}: ${job.status}.`, jobId: job.id }
       }
       if (action === 'result') {
+        const waitSeconds = Math.max(0, Math.min(300, Number(args?.wait) || 0))
+        if (waitSeconds > 0 && (job.status === 'running' || job.status === 'queued')) {
+          // One turn instead of a poll loop: wait for the kernel to finish, then
+          // report the same way as an immediate call.
+          const deadline = Date.now() + waitSeconds * 1000
+          while (Date.now() < deadline && (job.status === 'running' || job.status === 'queued')) {
+            await new Promise((resolve) => setTimeout(resolve, 500))
+          }
+        }
+        const waited = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
         if (job.status === 'queued') return { ok: false, summary: `Job ${job.id} is queued and has not started yet.`, jobId: job.id }
-        if (job.status === 'running') return { ok: false, summary: `Job ${job.id} is still running (${elapsed} s).`, jobId: job.id }
+        if (job.status === 'running') return { ok: false, summary: `Job ${job.id} is still running (${waited} s).`, jobId: job.id }
         if (job.status === 'failed') return { ok: false, summary: `Job ${job.id} failed: ${job.error}`, jobId: job.id }
         if (job.status === 'cancelled') return { ok: false, summary: `Job ${job.id} was cancelled.`, jobId: job.id }
         return { ok: true, summary: job.summary === '' ? '(no output)' : job.summary, jobId: job.id }
@@ -1364,6 +1380,10 @@ export function apply(ctx, config = {}) {
           type: 'boolean',
           description: 'Request the step-by-step solution when Wolfram|Alpha offers it (default true).',
         },
+        maxChars: {
+          type: 'number',
+          description: 'Maximum characters of the answer (default 4000, max 20000).',
+        },
       },
       required: ['query'],
     },
@@ -1383,6 +1403,7 @@ export function apply(ctx, config = {}) {
       const query = String(args?.query ?? '').trim()
       if (query === '') throw new Error('wolfram_alpha needs `query`.')
       const steps = args?.steps !== false
+      const maxChars = Math.max(500, Math.min(20_000, Math.floor(Number(args?.maxChars) || 4000)))
       const context = await kernelContext(exec)
       // $AllowInternet is off by default in a fresh kernel; Block enables it only for
       // this query. The step state is discovered first because Wolfram|Alpha exposes
@@ -1422,12 +1443,16 @@ export function apply(ctx, config = {}) {
       for (let i = 0; i < codes.length; i += 2048) {
         text += String.fromCodePoint.apply(null, codes.slice(i, i + 2048))
       }
-      text = truncate(text, 12_000)
+      const originalLength = text.length
+      text = truncate(text, maxChars)
+      const clipped = originalLength > maxChars
+        ? ` (truncated to ${maxChars} of ${originalLength} chars; raise maxChars for the rest)`
+        : ''
       return {
         ok: true,
         status: 'ok',
         steps: stepsOffered,
-        summary: `Wolfram|Alpha${note}:\n${text}`,
+        summary: `Wolfram|Alpha${note}${clipped}:\n${text}`,
       }
     },
   }
@@ -1719,12 +1744,14 @@ export function apply(ctx, config = {}) {
     description: [
       'Statically inspect Wolfram Language code with CodeInspector before running it: syntax errors,',
       'suspicious constructs, unknown symbols. Never evaluates the code, so it is cheap and safe.',
+      'Pass `code`, or `path` to inspect a file (for example a task\'s code.wl).',
       'Use it on a non-trivial snippet before wolfram_eval when the syntax is uncertain.',
     ].join(' '),
     parameters: {
       type: 'object',
       properties: {
         code: { type: 'string', description: 'Wolfram Language source to inspect (not evaluated).' },
+        path: { type: 'string', description: 'File to inspect instead of `code`, relative to the workspace.' },
         limit: { type: 'number', description: 'Maximum findings to return (default 20).' },
       },
       required: ['code'],
@@ -1738,8 +1765,16 @@ export function apply(ctx, config = {}) {
     },
     async execute(args, exec) {
       const context = await kernelContext(exec)
-      const code = String(args?.code ?? '')
-      if (code.trim() === '') throw new Error('wolfram_check needs `code`.')
+      const requestedPath = String(args?.path ?? '').trim()
+      let code = String(args?.code ?? '')
+      let inspected = 'code'
+      if (code.trim() === '' && requestedPath !== '') {
+        const file = resolveWorkspacePath(context.cwd, requestedPath, requestedPath)
+        if (!existsSync(file)) throw new Error(`wolfram_check: no such file: ${file}`)
+        code = readFileSync(file, 'utf8')
+        inspected = requestedPath
+      }
+      if (code.trim() === '') throw new Error('wolfram_check needs `code` or `path`.')
       const limit = Math.max(1, Math.min(100, Math.floor(Number(args?.limit) || 20)))
       const cell = `Module[{res, findings},
   res = Quiet@Check[CodeInspector\`CodeInspect[${wlString(code)}], $Failed];
@@ -1756,9 +1791,10 @@ export function apply(ctx, config = {}) {
         return { ok: false, count: 0, summary: `CodeInspector: ${payload.error ?? 'failed'}` }
       }
       const findings = Array.isArray(payload.findings) ? payload.findings : []
+      const label = inspected === 'code' ? 'CodeInspector' : `CodeInspector (${inspected})`
       const lines = [findings.length === 0
-        ? 'CodeInspector: no issues.'
-        : `CodeInspector: ${payload.count} issue(s).`]
+        ? `${label}: no issues.`
+        : `${label}: ${payload.count} issue(s).`]
       for (const finding of findings) {
         const where = finding.line > 0 ? `line ${finding.line}` : 'code'
         lines.push(`  ${where}  ${String(finding.severity ?? '?').padEnd(8)} ${String(finding.message ?? '').trim()} [${finding.tag ?? '?'}]`)
@@ -1780,6 +1816,7 @@ export function apply(ctx, config = {}) {
       properties: {
         query: { type: 'string', description: 'Symbol name or fragment, e.g. "PlotRange" or "Solver".' },
         limit: { type: 'number', description: 'Maximum symbols to describe (default 5).' },
+        options: { type: 'boolean', description: 'List option names and defaults of the exact match (default true).' },
       },
       required: ['query'],
     },
@@ -1811,7 +1848,7 @@ export function apply(ctx, config = {}) {
           "syntax" -> If[Head[sym] === Symbol, ToString[SyntaxInformation[Evaluate[sym]]], ""],
           "attributes" -> If[sym === $Failed, {}, Map[ToString, Attributes[Evaluate[sym]]]],
           "options" -> If[sym === $Failed, {},
-            Map[ToString[#[[1]]] <> " -> " <> StringTake[ToString[#[[2]]], UpTo[70]] &,
+            Map[ToString[#[[1]]] <> " -> " <> StringTake[ToString[#[[2]], InputForm], UpTo[60]] &,
               Take[Options[Evaluate[sym]], UpTo[12]]]]|>]],
       pick]|>, "JSON"], "\\n" -> ""]]
   ]`
@@ -1819,20 +1856,35 @@ export function apply(ctx, config = {}) {
       const payload = await evaluateMarked(context, cell, HELP_MARKER, usagePrelude)
       if (payload.ok !== true) return { ok: false, total: 0, summary: 'wolfram_help failed.' }
       const items = Array.isArray(payload.items) ? payload.items : []
+      const listOptions = args?.options !== false
+      /** First sentence of a usage message, on one line. */
+      const firstSentence = (usage) => {
+        const text = String(usage ?? '').trim().replace(/\s+/g, ' ')
+        const stop = text.indexOf('. ')
+        return truncate(stop > 20 ? text.slice(0, stop + 1) : text, 140)
+      }
       const lines = [`Symbols matching "${query}": ${payload.total}${payload.total > items.length ? ` (showing ${items.length})` : ''}`]
       if (items.length === 0) {
         lines.push('No kernel symbol matches. File formats, guide pages and messages are not symbols — try wolfram_doc (for example "CSV"), or a shorter name.')
       }
-      for (const item of items) {
+      // The exact match carries the detail; neighbours are one-liners, otherwise a
+      // broad query ("Plot") floods the answer with 5 × 12 options.
+      const ordered = [...items].sort((a, b) => Number(b?.name === query) - Number(a?.name === query))
+      for (const item of ordered) {
+        const isExact = item.name === query
         const attributes = Array.isArray(item.attributes) && item.attributes.length > 0 ? ` [${item.attributes.join(', ')}]` : ''
         const options = Array.isArray(item.options) ? item.options : []
-        const degraded = item.degraded === true ? ' (usage: degraded)' : ''
+        const degraded = item.degraded === true ? (isExact ? ' (usage: degraded)' : ' (usage degraded)') : ''
         lines.push(`${item.name}${attributes}${options.length === 0 ? '' : ` — ${options.length} option(s)`}${degraded}`)
         const usage = String(item.usage ?? '').trim()
+        if (!isExact) {
+          if (usage !== '') lines.push(`  ${firstSentence(usage)}`)
+          continue
+        }
         if (usage !== '') lines.push(`  ${truncate(usage, 600)}`)
         const syntax = String(item.syntax ?? '').trim()
         if (syntax !== '') lines.push(`  syntax: ${truncate(syntax, 160)}`)
-        for (const option of options) lines.push(`    ${option}`)
+        if (listOptions) for (const option of options) lines.push(`    ${option}`)
       }
       return { ok: items.length > 0, total: Number(payload.total) || 0, summary: lines.join('\n') }
     },

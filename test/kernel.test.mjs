@@ -88,7 +88,7 @@ test('status reports the bridge version and evaluation counters', async (t) => {
   await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
   const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
 
-  assert.match(status.summary, /Bridge: 1\.3\.3/)
+  assert.match(status.summary, /bridge: 1\.3\.3/)
   assert.match(status.summary, /Evaluations: 1/)
 })
 
@@ -903,6 +903,60 @@ test('wolfram_state symbols hints at string patterns instead of regex', async (t
   const result = await tools.get('wolfram_state').execute({ action: 'symbols', pattern: 'Global`*[A-Z]*' }, {})
   assert.match(result.summary, /0 name\(s\)/)
   assert.match(result.summary, /string patterns/)
+})
+
+test('wolfram_help keeps the detail for the exact match only', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  // A broad query used to print 12 options for every neighbour as well.
+  const broad = await tools.get('wolfram_help').execute({ query: 'Plot', limit: 5 }, {})
+  const optionLines = broad.summary.split('\n').filter((line) => /^\s{4}\S+ -> /.test(line))
+  assert.equal(optionLines.length, 12) // Plot's own options, not 5 × 12
+  assert.match(broad.summary, /Plot \[HoldAll/)
+  assert.match(broad.summary, /Plot3D \[HoldAll/) // neighbour still listed, one line
+
+  // Option listing can be dropped entirely; usage stays.
+  const compact = await tools.get('wolfram_help').execute({ query: 'Plot', limit: 1, options: false }, {})
+  assert.doesNotMatch(compact.summary, /^\s{4}\S+ -> /m)
+  assert.match(compact.summary, /generates a plot of/)
+})
+
+test('wolfram_notebook status names the running plugin version', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  await tools.get('wolfram_eval').execute({ code: '1 + 1', exportNotebook: false }, {})
+  const status = await tools.get('wolfram_notebook').execute({ action: 'status' }, {})
+  assert.match(status.summary, /Plugin \d+\.\d+\.\d+/)
+  assert.match(status.summary, /bridge: 1\.3\.3/)
+})
+
+test('wolfram_job result waits for a running job when asked', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({ action: 'submit', code: 'Pause[2]; 41 + 1', title: 'wait check' }, {})
+  const id = submitted.jobId
+  const result = await job.execute({ action: 'result', id, wait: 60 }, {})
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /42/)
+  assert.doesNotMatch(result.summary, /still running/)
+})
+
+test('wolfram_check inspects a file when given a path', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+
+  const dir = mkdtempSync(join(tmpdir(), 'wl-check-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'code.wl')
+  writeFileSync(file, 'f[x_] := (x^2 + 1\n', 'utf8')
+
+  const result = await tools.get('wolfram_check').execute({ path: file }, {})
+  assert.match(result.summary, /CodeInspector \(.+code\.wl\)/)
+  assert.match(result.summary, /Missing closer/)
 })
 
 

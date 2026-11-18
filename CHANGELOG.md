@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.14.0 — 2026-11-18
+
+### Added
+
+- **`wolfram_job action="result"` waits when asked.** `wait` (seconds, up to 300) blocks until the
+  job finishes and returns its output, so a long computation costs one call instead of a poll loop.
+- **`wolfram_check` inspects a file.** `path` reads a task's `code.wl` (or any file) instead of
+  inline `code`, and the answer names the inspected file.
+- **`wolfram_alpha` has `maxChars`** (default 4000, max 20000) and says when the answer was clipped,
+  instead of silently returning up to 12 000 characters.
+- **`wolfram_notebook action="status"` reports the plugin version** next to the bridge version, so
+  it is obvious whether a restart actually loaded the new build.
+
+### Changed
+
+- **`wolfram_help` is compact.** The exact match keeps its usage, syntax and options (12 at most);
+  the neighbouring matches are one line with the first sentence, because a broad query such as
+  `Plot` used to print 12 options for each of 5 symbols. `options: false` drops the option list
+  completely, and defaults are rendered with `InputForm`, so `1/GoldenRatio` no longer breaks the
+  block with a three-line fraction.
+
+### Tests
+
+- 59 tests: compact help and `options: false`, the plugin version in the status line, `wait` on a
+  job result, and `wolfram_check path`.
+
 ## 1.13.3 — 2026-11-18
 
 ### Changed
