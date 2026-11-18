@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.0 — 2026-11-18
+
+### Added
+
+- **`wolfram_check`** — static inspection with the bundled CodeInspector 1.13 before anything runs:
+  syntax errors and suspicious constructs with line, severity and message, and the code is never
+  evaluated. Cheap insurance against a wasted round trip on broken syntax.
+- **`wolfram_help`** — symbol lookup in the running kernel: matching names, attributes and the real
+  option names with their defaults (`FindRoot — 11 option(s): WorkingPrecision -> MachinePrecision, …`).
+  Models get option names wrong far more often than formulas, and this answers from the kernel.
+- `$HistoryLength = 0` when the bridge loads, so a long-lived session does not accumulate output
+  history in memory.
+
 ## 1.9.1 — 2026-11-16
 
 ### Changed

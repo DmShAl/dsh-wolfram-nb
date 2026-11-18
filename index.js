@@ -1672,6 +1672,116 @@ export function apply(ctx, config = {}) {
     },
   }
 
+  const CHECK_MARKER = '@@WB_CHECK@@'
+  const wolframCheck = {
+    name: 'wolfram_check',
+    description: [
+      'Statically inspect Wolfram Language code with CodeInspector before running it: syntax errors,',
+      'suspicious constructs, unknown symbols. Never evaluates the code, so it is cheap and safe.',
+      'Use it on a non-trivial snippet before wolfram_eval when the syntax is uncertain.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Wolfram Language source to inspect (not evaluated).' },
+        limit: { type: 'number', description: 'Maximum findings to return (default 20).' },
+      },
+      required: ['code'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, count: { type: 'integer' }, summary: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const code = String(args?.code ?? '')
+      if (code.trim() === '') throw new Error('wolfram_check needs `code`.')
+      const limit = Math.max(1, Math.min(100, Math.floor(Number(args?.limit) || 20)))
+      const cell = `Module[{res, findings},
+  res = Quiet@Check[CodeInspector\`CodeInspect[${wlString(code)}], $Failed];
+  If[res === $Failed,
+    Print["${CHECK_MARKER}" <> "{\\"ok\\":false,\\"error\\":\\"the code could not be parsed\\"}"],
+    findings = Map[Function[o, With[{src = Cases[o[[4]], {a_Integer, b_Integer}, Infinity]},
+        <|"tag" -> o[[1]], "severity" -> o[[3]], "message" -> o[[2]],
+          "line" -> If[src === {}, 0, First[First[src]]]|>]], Take[res, UpTo[${limit}]]];
+    Print["${CHECK_MARKER}" <> StringReplace[ExportString[
+      <|"ok" -> True, "count" -> Length[res], "findings" -> findings|>, "JSON"], "\\n" -> ""]]]
+  ]`
+      const payload = await evaluateMarked(context, cell, CHECK_MARKER, 'Needs["CodeInspector`"];')
+      if (payload.ok !== true) {
+        return { ok: false, count: 0, summary: `CodeInspector: ${payload.error ?? 'failed'}` }
+      }
+      const findings = Array.isArray(payload.findings) ? payload.findings : []
+      const lines = [findings.length === 0
+        ? 'CodeInspector: no issues.'
+        : `CodeInspector: ${payload.count} issue(s).`]
+      for (const finding of findings) {
+        const where = finding.line > 0 ? `line ${finding.line}` : 'code'
+        lines.push(`  ${where}  ${String(finding.severity ?? '?').padEnd(8)} ${String(finding.message ?? '').trim()} [${finding.tag ?? '?'}]`)
+      }
+      if (payload.count > findings.length) lines.push(`  … ${payload.count - findings.length} more`)
+      return { ok: findings.length === 0, count: findings.length, summary: lines.join('\n') }
+    },
+  }
+
+  const HELP_MARKER = '@@WB_HELP@@'
+  const wolframHelp = {
+    name: 'wolfram_help',
+    description: [
+      'Look up Wolfram Language symbols by name and report their options and attributes.',
+      'Use it instead of guessing an option name or a function name; it answers from the running kernel.',
+    ].join(' '),
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Symbol name or fragment, e.g. "PlotRange" or "Solver".' },
+        limit: { type: 'number', description: 'Maximum symbols to describe (default 5).' },
+      },
+      required: ['query'],
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' }, total: { type: 'integer' }, summary: { type: 'string' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: String(value?.summary ?? '') }],
+    },
+    async execute(args, exec) {
+      const context = await kernelContext(exec)
+      const query = String(args?.query ?? '').trim()
+      if (query === '') throw new Error('wolfram_help needs `query`.')
+      const limit = Math.max(1, Math.min(12, Math.floor(Number(args?.limit) || 5)))
+      const cell = `Module[{q = ${wlString(query)}, names, pick},
+  names = SortBy[Select[Names["*" <> q <> "*"], StringLength[#] < 48 &], {StringLength, #} &];
+  pick = Take[names, UpTo[${limit}]];
+  Print["${HELP_MARKER}" <> StringReplace[ExportString[<|
+    "ok" -> True, "total" -> Length[names],
+    "items" -> Map[Function[n,
+      Module[{sym = Quiet@Check[ToExpression[n], $Failed]},
+        <|"name" -> n,
+          "attributes" -> If[sym === $Failed, {}, Map[ToString, Attributes[Evaluate[sym]]]],
+          "options" -> If[sym === $Failed, {},
+            Map[ToString[#[[1]]] <> " -> " <> StringTake[ToString[#[[2]]], UpTo[70]] &,
+              Take[Options[Evaluate[sym]], UpTo[12]]]]|>]],
+      pick]|>, "JSON"], "\\n" -> ""]]
+  ]`
+      const payload = await evaluateMarked(context, cell, HELP_MARKER)
+      if (payload.ok !== true) return { ok: false, total: 0, summary: 'wolfram_help failed.' }
+      const items = Array.isArray(payload.items) ? payload.items : []
+      const lines = [`Symbols matching "${query}": ${payload.total}${payload.total > items.length ? ` (showing ${items.length})` : ''}`]
+      for (const item of items) {
+        const attributes = Array.isArray(item.attributes) && item.attributes.length > 0 ? ` [${item.attributes.join(', ')}]` : ''
+        const options = Array.isArray(item.options) ? item.options : []
+        lines.push(`${item.name}${attributes}${options.length === 0 ? '' : ` — ${options.length} option(s)`}`)
+        for (const option of options) lines.push(`    ${option}`)
+      }
+      return { ok: items.length > 0, total: Number(payload.total) || 0, summary: lines.join('\n') }
+    },
+  }
+
   const wolframReady = {
     name: 'wolfram_ready',
     description: [
@@ -1727,6 +1837,8 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(wolframRender), 'wolfram notebook: wolfram_render tool')
   ctx.effect(() => ctx.tools.register(wolframBatch), 'wolfram notebook: wolfram_batch tool')
   ctx.effect(() => ctx.tools.register(wolframReady), 'wolfram notebook: wolfram_ready tool')
+  ctx.effect(() => ctx.tools.register(wolframCheck), 'wolfram notebook: wolfram_check tool')
+  ctx.effect(() => ctx.tools.register(wolframHelp), 'wolfram notebook: wolfram_help tool')
 
   ctx.effect(() => () => {
     for (const job of jobs.values()) {

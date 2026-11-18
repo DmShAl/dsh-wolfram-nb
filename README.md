@@ -58,6 +58,8 @@ plugin_manager install_bundle  target=<克隆目录的绝对路径>
 | `wolfram_render` | экспорт `Plot`/`Graphics` в PNG/SVG/PDF/JPG с `ImageResolution`; создаёт каталог, сам подгружает MaTeX при `MaTeX[...]` в выражении |
 | `wolfram_batch` | параллельный запуск независимых фрагментов кода, каждый в своём ядре (`maxParallel`, до 12 элементов); в ответе — отчёт OK/FAILED по каждому |
 | `wolfram_ready` | готов ли каталог к задаче: `AGENTS.md`/`tools`, сколько компонентов окружения найдено (и каких нет), состояние git-репозитория |
+| `wolfram_check` | статическая проверка кода через CodeInspector до запуска: ошибки синтаксиса и подозрительные места с номером строки; код не вычисляется |
+| `wolfram_help` | поиск символов в работающем ядре: совпадения, атрибуты и настоящие имена опций с умолчаниями |
 | 面板内选择笔记本 | 面板顶部「打开…」列出工作区（根目录、`wolfram-notebooks/`、当前笔记本目录）里的 `.nb`，点选即渲染；也可直接输入路径 |
 | `/wolfram-open` 命令 | 在输入框执行 `/wolfram-open <路径>`，不产生模型消息，直接切换面板内容 |
 | `/initmath` 命令 | 准备计算目录：复制 `workspace\`（`AGENTS.md`、`tools\`）、创建 `tasks\`/`data\`、初始化本地 git 仓库（有 git-lfs 时自动启用 LFS）并做首次提交，然后检查环境（Mathematica、PDFConv、Python、MiKTeX、Git、Node）；`--no-git` 跳过 git；仓库内会被拒绝 |

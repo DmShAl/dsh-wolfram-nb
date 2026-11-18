@@ -47,6 +47,8 @@
 | `pdfconv_convert` | `.md`/`.tex` → `pdf`+`docx`, `.docx` → `md`; существующие файлы не перезаписывает без `overwrite: true` |
 | `pdfconv_check` | окружение PDFConv: Pandoc, MiKTeX, пакеты LaTeX, шрифты, пробная сборка |
 | `wolfram_ready` | готов ли каталог: `AGENTS.md`/`tools`, компоненты, git |
+| `wolfram_check` | статическая проверка кода до запуска (CodeInspector): синтаксис и подозрительные места, код не вычисляется |
+| `wolfram_help` | символы и их опции с умолчаниями — вместо угадывания имён |
 
 ## Окружение
 

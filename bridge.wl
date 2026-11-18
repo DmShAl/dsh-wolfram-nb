@@ -21,6 +21,9 @@ WolframBridge`$maxInputFormBytes = 4000000;
 WolframBridge`$cellTimeout = 300;
 WolframBridge`$imageTimeout = 30;
 
+(* A long-lived session must not accumulate output history; it is pure memory. *)
+$HistoryLength = 0;
+
 WolframBridge`decode[text_String] := ByteArrayToString[BaseDecode[text], "UTF-8"];
 
 WolframBridge`encode[text_String] := BaseEncode[StringToByteArray[text, "ISO8859-1"]];

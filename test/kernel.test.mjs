@@ -560,6 +560,36 @@ test('checkEnvironment reports the components a calculation needs', (t) => {
   assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
 })
 
+test('wolfram_check reports a lint finding and passes clean code', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const bad = await tools.get('wolfram_check').execute(
+    { code: 'l = {}; Do[AppendTo[l, i], {i, 10}]' },
+    {},
+  )
+  assert.match(bad.summary, /issue\(s\)/)
+  assert.match(bad.summary, /line 1/)
+  assert.equal(bad.ok, false)
+
+  const good = await tools.get('wolfram_check').execute(
+    { code: 'Plot[Sin[x], {x, 0, 2 Pi}]' },
+    {},
+  )
+  assert.match(good.summary, /no issues/)
+  assert.equal(good.ok, true)
+})
+
+test('wolfram_help answers with the real options of a symbol', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+
+  const result = await tools.get('wolfram_help').execute({ query: 'FindRoot', limit: 1 }, {})
+  assert.match(result.summary, /FindRoot/)
+  assert.match(result.summary, /WorkingPrecision/)
+  assert.match(result.summary, /MaxIterations/)
+})
+
 test('wolfram_ready reports the workspace, git and environment state', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
   teardown(t, cleanups)
