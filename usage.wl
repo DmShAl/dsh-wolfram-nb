@@ -114,5 +114,7 @@ wuUsgText[sym_Symbol] := Module[{raw, parts, pieces, result, degraded = False},
   result = StringJoin[pieces];
   result = StringReplace[result, Thread[$wuInvisible -> ""]];
   result = StringTrim@StringReplace[result, WhitespaceCharacter .. -> " "];
+  (* Typesetting puts a space after a comma; a linear reading needs it too. *)
+  result = StringReplace[result, RegularExpression[",(?=\\S)"] -> ", "];
   <|"text" -> wuAscii[result], "raw" -> raw, "degraded" -> degraded|>
 ];

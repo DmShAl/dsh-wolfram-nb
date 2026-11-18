@@ -1785,7 +1785,7 @@ export function apply(ctx, config = {}) {
         const degraded = item.degraded === true ? ' (usage: degraded)' : ''
         lines.push(`${item.name}${attributes}${options.length === 0 ? '' : ` — ${options.length} option(s)`}${degraded}`)
         const usage = String(item.usage ?? '').trim()
-        if (usage !== '') lines.push(`  ${truncate(usage, 300)}`)
+        if (usage !== '') lines.push(`  ${truncate(usage, 600)}`)
         const syntax = String(item.syntax ?? '').trim()
         if (syntax !== '') lines.push(`  syntax: ${truncate(syntax, 160)}`)
         for (const option of options) lines.push(`    ${option}`)

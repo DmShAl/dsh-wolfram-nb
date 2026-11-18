@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.2 — 2026-11-18
+
+### Changed
+
+- **Usage text gets the space after a comma** — typesetting always renders it, and a linear
+  reading needs it: `Plot[f, {x, x_min, x_max}]` instead of `Plot[f,{x,x_min,x_max}]`.
+- The usage block in the answer is 600 characters instead of 300, which covers `NDSolve`-sized
+  messages without a second call.
+
 ## 1.11.1 — 2026-11-18
 
 ### Fixed
