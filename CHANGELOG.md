@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.11.0 — 2026-11-18
+
+### Added
+
+- **Usage text in `wolfram_help`.** `usage.wl` flattens the box-encoded usage messages without a
+  front end: a scanner finds the `\!\(\*...\)` islands (box escapes are single private-use
+  characters, and nested `\( ... \)` are counted), each island is parsed with `ToExpression[...,
+  HoldComplete]` and flattened through a closed whitelist of box heads (`RowBox`, `StyleBox`,
+  `SubscriptBox`, `TemplateBox`, …). An unknown head fails instead of guessing, and the caller
+  reports `degraded`. Example output: `FindRoot[f,{x,x_0}] searches for a numerical root …`.
+- **`SyntaxInformation` in the same answer** — `ArgumentsPattern` gives the call shape honestly
+  (`{_, {_, __}, OptionsPattern[]}`) where prose cannot.
+- The text is transliterated to ASCII before the JSON line: the kernel escapes non-ASCII as
+  `\[Name]`/`\ddd`, which is not valid JSON and used to break the marker.
+
+### Note
+
+- `ToString[Plot::usage]` pre-renders the box escapes (1569 → 482 characters), so the flattener
+  reads `MessageName[sym, "usage"]` directly instead.
+
 ## 1.10.0 — 2026-11-18
 
 ### Added

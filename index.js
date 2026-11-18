@@ -1760,22 +1760,32 @@ export function apply(ctx, config = {}) {
   Print["${HELP_MARKER}" <> StringReplace[ExportString[<|
     "ok" -> True, "total" -> Length[names],
     "items" -> Map[Function[n,
-      Module[{sym = Quiet@Check[ToExpression[n], $Failed]},
+      Module[{sym = Quiet@Check[ToExpression[n], $Failed], u},
+        u = If[Head[sym] === Symbol, wuUsgText[sym], <|"text" -> "", "degraded" -> True|>];
         <|"name" -> n,
+          "usage" -> If[StringQ[u["text"]], u["text"], ""],
+          "degraded" -> TrueQ[u["degraded"]],
+          "syntax" -> If[Head[sym] === Symbol, ToString[SyntaxInformation[Evaluate[sym]]], ""],
           "attributes" -> If[sym === $Failed, {}, Map[ToString, Attributes[Evaluate[sym]]]],
           "options" -> If[sym === $Failed, {},
             Map[ToString[#[[1]]] <> " -> " <> StringTake[ToString[#[[2]]], UpTo[70]] &,
               Take[Options[Evaluate[sym]], UpTo[12]]]]|>]],
       pick]|>, "JSON"], "\\n" -> ""]]
   ]`
-      const payload = await evaluateMarked(context, cell, HELP_MARKER)
+      const usagePrelude = `Get[${wlString(join(HERE, 'usage.wl').replace(/\\/g, '/'))}];`
+      const payload = await evaluateMarked(context, cell, HELP_MARKER, usagePrelude)
       if (payload.ok !== true) return { ok: false, total: 0, summary: 'wolfram_help failed.' }
       const items = Array.isArray(payload.items) ? payload.items : []
       const lines = [`Symbols matching "${query}": ${payload.total}${payload.total > items.length ? ` (showing ${items.length})` : ''}`]
       for (const item of items) {
         const attributes = Array.isArray(item.attributes) && item.attributes.length > 0 ? ` [${item.attributes.join(', ')}]` : ''
         const options = Array.isArray(item.options) ? item.options : []
-        lines.push(`${item.name}${attributes}${options.length === 0 ? '' : ` — ${options.length} option(s)`}`)
+        const degraded = item.degraded === true ? ' (usage: degraded)' : ''
+        lines.push(`${item.name}${attributes}${options.length === 0 ? '' : ` — ${options.length} option(s)`}${degraded}`)
+        const usage = String(item.usage ?? '').trim()
+        if (usage !== '') lines.push(`  ${truncate(usage, 300)}`)
+        const syntax = String(item.syntax ?? '').trim()
+        if (syntax !== '') lines.push(`  syntax: ${truncate(syntax, 160)}`)
         for (const option of options) lines.push(`    ${option}`)
       }
       return { ok: items.length > 0, total: Number(payload.total) || 0, summary: lines.join('\n') }

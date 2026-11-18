@@ -62,7 +62,7 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
 | `wolfram_ready` | Reports whether the folder can take a task: `AGENTS.md`/`tools`, the toolchain with the missing names, and the git repository state |
 | `wolfram_check` | Static inspection with CodeInspector before running: syntax errors and suspicious constructs with line numbers; the code is never evaluated |
-| `wolfram_help` | Symbol lookup in the running kernel: matches, attributes and the real option names with defaults |
+| `wolfram_help` | Symbol lookup in the running kernel: matches, readable usage text (box islands flattened without a front end), `SyntaxInformation` (`ArgumentsPattern`), attributes and the real option names with defaults |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
 | `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`), creates `tasks\` and `data\`, initializes a local git repository with Git LFS when available (first commit), then reports the environment (Mathematica, PDFConv, Python, MiKTeX, Git, Node); `--no-git` skips git; refuses the plugin repository |

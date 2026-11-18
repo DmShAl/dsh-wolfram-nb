@@ -1,6 +1,6 @@
 {
   "name": "dsh-wolfram-nb",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -47,7 +47,8 @@
     "LICENSE",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "usage.wl"
   ],
   "dsh": {
     "bundle": {

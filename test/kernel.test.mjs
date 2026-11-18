@@ -580,12 +580,14 @@ test('wolfram_check reports a lint finding and passes clean code', async (t) => 
   assert.equal(good.ok, true)
 })
 
-test('wolfram_help answers with the real options of a symbol', async (t) => {
+test('wolfram_help answers with usage text, syntax and real options', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
   teardown(t, cleanups)
 
   const result = await tools.get('wolfram_help').execute({ query: 'FindRoot', limit: 1 }, {})
   assert.match(result.summary, /FindRoot/)
+  assert.match(result.summary, /searches for a numerical root/)
+  assert.match(result.summary, /ArgumentsPattern/)
   assert.match(result.summary, /WorkingPrecision/)
   assert.match(result.summary, /MaxIterations/)
 })
