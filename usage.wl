@@ -34,12 +34,14 @@ wuFlat[RowBox[list_List]] := StringJoin[wuFlat /@ list];
 wuFlat[(StyleBox | FormBox | TagBox | AdjustmentBox | TooltipBox | ButtonBox |
   PaneBox | FrameBox)[body_, ___]] := wuFlat[body];
 wuFlat[InterpretationBox[body_, ___]] := wuFlat[body];
-wuFlat[SubscriptBox[a_, b_]] := wuFlat[a] <> "_" <> wuFlat[b];
-wuFlat[SuperscriptBox[a_, b_]] := wuFlat[a] <> "^" <> wuFlat[b];
-wuFlat[SubsuperscriptBox[a_, b_, c_]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
-wuFlat[OverscriptBox[a_, b_]] := wuFlat[a] <> "^" <> wuFlat[b];
-wuFlat[UnderscriptBox[a_, b_]] := wuFlat[a] <> "_" <> wuFlat[b];
-wuFlat[UnderoverscriptBox[a_, b_, c_]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
+wuFlat[SubscriptBox[a_, b_, ___]] := wuFlat[a] <> "_" <> wuFlat[b];
+wuFlat[SuperscriptBox[a_, b_, ___]] := wuFlat[a] <> "^" <> wuFlat[b];
+wuFlat[SubsuperscriptBox[a_, b_, c_, ___]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
+wuFlat[OverscriptBox[a_, b_, ___]] := wuFlat[a] <> "^" <> wuFlat[b];
+wuFlat[UnderscriptBox[a_, b_, ___]] := wuFlat[a] <> "_" <> wuFlat[b];
+(* LimitsPositioning and friends ride along as options: UnderoverscriptBox[
+   "\[Sum]", ..., LimitsPositioning -> False] carries four arguments. *)
+wuFlat[UnderoverscriptBox[a_, b_, c_, ___]] := wuFlat[a] <> "_" <> wuFlat[b] <> "^" <> wuFlat[c];
 wuFlat[FractionBox[a_, b_]] := wuFlat[a] <> "/" <> wuFlat[b];
 wuFlat[SqrtBox[a_]] := "sqrt(" <> wuFlat[a] <> ")";
 (* Inline artwork in a details table carries no words; drop it instead of failing
@@ -158,8 +160,10 @@ wuAscii[s_String] := StringJoin[Map[wuCharAscii, Characters[s]]];
 
 wuUsgText[sym_Symbol] := Module[{raw, parts, pieces, result, degraded = False},
   raw = Quiet@Check[MessageName[sym, "usage"], $Failed];
+  (* Several built-ins (Table, Tooltip, TimeSeries) have no usage message in the
+     kernel at all; that is not a flattening failure, so it is not "degraded". *)
   If[!StringQ[raw] || StringTrim[raw] === "",
-    Return[<|"text" -> "", "raw" -> "", "degraded" -> True|>]];
+    Return[<|"text" -> "", "raw" -> "", "degraded" -> False|>]];
   parts = Quiet@Check[wuSplit[raw], $Failed];
   If[parts === $Failed, Return[<|"text" -> "", "raw" -> raw, "degraded" -> True|>]];
   pieces = Map[

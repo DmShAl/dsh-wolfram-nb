@@ -768,6 +768,16 @@ test('usage text keeps the operators the kernel stores as private-use characters
   // pos_1v_1. The flattener now resolves characters by name instead.
   const result = await tools.get('wolfram_help').execute({ query: 'SparseArray' }, {})
   assert.match(result.summary, /pos_1->v_1/)
+
+  // UnderoverscriptBox carries an option (LimitsPositioning) after its three
+  // positional arguments; matching exactly three dropped the whole island.
+  const sum = await tools.get('wolfram_help').execute({ query: 'Sum' }, {})
+  assert.match(sum.summary, /evaluates the sum/)
+  assert.doesNotMatch(sum.summary, /usage: degraded/)
+
+  // Table has no usage message in the kernel at all, which is not degradation.
+  const table = await tools.get('wolfram_help').execute({ query: 'Table' }, {})
+  assert.doesNotMatch(table.summary, /usage: degraded/)
 })
 
 test('reference-page details keep the operators and the cells', async (t) => {

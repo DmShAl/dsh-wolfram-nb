@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.13.1 — 2026-11-18
+
+### Fixed
+
+- **Script boxes with options.** `UnderoverscriptBox` carries
+  `LimitsPositioning -> ...` after its three positional arguments, so matching exactly three
+  dropped the island: the `Sum` usage text lost its formula and was marked degraded. The
+  sub/superscript and over/underscript rules now accept trailing arguments.
+- **A missing usage message is not degradation.** `Table`, `Tooltip` and `TimeSeries` have no
+  `::usage` in the kernel; `wolfram_help` no longer warns "usage: degraded" for them.
+
 ## 1.13.0 — 2026-11-18
 
 ### Fixed
