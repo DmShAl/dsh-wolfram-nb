@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.1 — 2026-11-18
+
+### Fixed
+
+- **`wolfram_doc` includes the tables.** Detail pages introduce tables with a lead-in ("The
+  following wrappers w can be used for the f_i:") and put the content into `2ColumnTableMod` /
+  `3ColumnTableMod` cells; without them the notes were dangling sentences. Table rows are now
+  flattened with `" - "` inside a row and `"; "` between rows, and the child `TableText` cells are
+  not collected twice.
+
 ## 1.12.0 — 2026-11-18
 
 ### Added

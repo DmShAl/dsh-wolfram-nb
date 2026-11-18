@@ -39,7 +39,16 @@ wuFlat[FractionBox[a_, b_]] := wuFlat[a] <> "/" <> wuFlat[b];
 wuFlat[SqrtBox[a_]] := "sqrt(" <> wuFlat[a] <> ")";
 wuFlat[TemplateBox[args_List, ___]] := wuFlat[First[args]];
 wuFlat[TextData[content_]] := If[ListQ[content], StringJoin[wuFlat /@ content], wuFlat[content]];
-wuFlat[GridBox[rows_List, ___]] := StringJoin[Riffle[StringJoin[wuFlat /@ #] & /@ rows, " "]];
+wuFlat[GridBox[rows_List, ___]] := StringRiffle[
+  Select[
+    Map[
+      Function[row,
+        StringRiffle[
+          Select[StringTrim /@ (wuFlat /@ If[ListQ[row], row, {row}]), # =!= "" &],
+          " - "]],
+      rows],
+    # =!= "" &],
+  "; "];
 wuFlat[Cell[body_, ___]] := wuFlat[body];
 wuFlat[BoxData[body_]] := wuFlat[body];
 wuFlat[s_String] := s;

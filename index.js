@@ -1854,7 +1854,8 @@ export function apply(ctx, config = {}) {
       }
       const cell = `Module[{nb = Quiet@Check[Import[${wlString(page.replace(/\\/g, '/'))}], $Failed], cells, text},
   cells = If[Head[nb] === Notebook,
-    Cases[nb, Cell[bd_, "Notes", ___] :> Quiet@Check[Catch[wuFlat[bd], "usage"], ""], Infinity],
+    Cases[nb, Cell[bd_, s_String, ___] /; MemberQ[{"Notes", "2ColumnTableMod",
+      "3ColumnTableMod", "3ColumnIllustratedTableMod"}, s] :> Quiet@Check[Catch[wuFlat[bd], "usage"], ""], Infinity],
     {}];
   cells = Select[cells, StringQ[#] && StringTrim[#] =!= "" &];
   text = wuAscii[StringJoin[Riffle[cells, " "]]];
