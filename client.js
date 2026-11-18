@@ -60,6 +60,51 @@ window.__ModuleLoader__.load({
       'init.close': 'Close',
     }
 
+    // meta.cells carries three plural forms separated by "|" for languages that
+    // need them (see countLabel below); a single form works for the rest.
+    const ru = {
+      'tab.title': 'Ноутбук Wolfram',
+      'guide.title': 'Ноутбук Wolfram',
+      'guide.description': 'Живой ноутбук Mathematica',
+      'empty.title': 'Ноутбука Wolfram пока нет',
+      'empty.body': 'Попросите агента вычислить код Wolfram Language или откройте готовый файл .nb.',
+      'state.loading': 'Загрузка…',
+      'state.error': 'Не удалось прочитать документ ноутбука.',
+      'state.waiting': 'Ожидание ноутбука…',
+      'action.refresh': 'Обновить',
+      'action.open': 'Открыть…',
+      'picker.path': 'Путь к ноутбуку',
+      'picker.placeholder': 'например, wolfram-notebooks/demo.nb',
+      'picker.open': 'Открыть',
+      'picker.loading': 'Читаю список ноутбуков…',
+      'picker.empty': 'В этом рабочем каталоге нет файлов .nb.',
+      'picker.refresh': 'Обновить список',
+      'picker.opening': 'Открываю',
+      'picker.failed': 'Не удалось открыть этот ноутбук.',
+      'picker.noCommand': 'В этой сборке нет канала команды /wolfram-open.',
+      'picker.close': 'Закрыть',
+      'meta.cells': 'ячейка|ячейки|ячеек',
+      'meta.kernel': 'Ядро',
+      'meta.updated': 'обновлено',
+      'meta.notebook': 'Файл ноутбука',
+      'meta.published': 'Опубликовано',
+      'kind.graphics': 'Графика',
+      'kind.image': 'Изображение',
+      'image.resize': 'Потяните, чтобы изменить размер (двойной щелчок — по ширине панели)',
+      'image.hint': 'Тяните за угол, чтобы изменить размер; двойной щелчок — по ширине панели',
+      'kind.parse': 'Этот ввод не удалось разобрать.',
+      'kind.timeout': 'Вычисление не уложилось в таймаут.',
+      'kind.fallback': 'Вывод не удалось отформатировать.',
+      'kind.opened': 'Открытый ноутбук',
+      'init.chip': 'Подготовить',
+      'init.title': 'Подготовить каталог к расчётам: AGENTS.md, tools/, tasks/ и data/',
+      'init.busy': 'Подготовка…',
+      'init.done': 'Каталог готов',
+      'init.failed': 'Не удалось подготовить каталог.',
+      'init.noCommand': 'В этой сборке нет канала команды /initmath.',
+      'init.close': 'Закрыть',
+    }
+
     const zh = {
       'tab.title': 'Wolfram 笔记本',
       'guide.title': 'Wolfram 笔记本',
@@ -517,6 +562,23 @@ window.__ModuleLoader__.load({
       const notebookPath = typeof doc?.notebookPath === 'string' ? doc.notebookPath : ''
       const updated = formatTime(doc?.publishedAt)
 
+      /** "3 ячейки" / "5 ячеек": the label may carry three forms separated by "|". */
+      const countLabel = (count) => {
+        const forms = String(t('meta.cells')).split('|')
+        if (forms.length === 1) return `${count} ${forms[0]}`
+        const last = count % 10
+        const lastTwo = count % 100
+        const index = Math.min(
+          last === 1 && lastTwo !== 11
+            ? 0
+            : last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)
+              ? 1
+              : 2,
+          forms.length - 1,
+        )
+        return `${count} ${forms[index]}`
+      }
+
       const loadFiles = async () => {
         if (session === '' || remote === undefined) return
         setFilesLoading(true)
@@ -590,7 +652,7 @@ window.__ModuleLoader__.load({
             h('h1', { className: 'dsw-wl-title' }, String(doc.title ?? '') || t('tab.title')),
             h('div', { className: 'dsw-wl-sub' },
               kernel === '' ? null : h('span', null, `${t('meta.kernel')} ${kernel}`),
-              h('span', null, `${cells.length} ${t('meta.cells')}`),
+              h('span', null, `${countLabel(cells.length)}`),
               updated === '' ? null : h('span', null, `${t('meta.updated')} ${updated}`),
               notebookPath === '' ? null : h('code', { title: notebookPath }, notebookPath))),
           h('div', { className: 'dsw-wl-headactions' },
@@ -739,7 +801,7 @@ window.__ModuleLoader__.load({
       inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'remote.commands'],
       apply(ctx) {
         const t = ctx.locale.bind(NS)
-        ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'wolfram notebook: dictionaries')
+        ctx.effect(() => ctx.locale.register(NS, { en, ru, zh }), 'wolfram notebook: dictionaries')
         ctx.effect(() => ctx.sidebarRightTabs.register({
           id: TAB_ID,
           kind: KIND,

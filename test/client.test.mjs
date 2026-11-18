@@ -56,10 +56,11 @@ function loadClient() {
 
 function makeContext() {
   const slots = []
+  let dictionaries = null
   const ctx = {
     effect(fn) { const cleanup = fn(); return cleanup },
     get() { return undefined },
-    locale: { register() {}, bind: () => (key) => key },
+    locale: { register(ns, dicts) { dictionaries = dicts }, bind: () => (key) => key },
     sidebarRightTabs: { register() {} },
     sidebarRight: {},
     remote: {
@@ -71,7 +72,7 @@ function makeContext() {
       register(spec, component) { slots.push({ spec, component }); return { spec, component } },
     },
   }
-  return { ctx, slots }
+  return { ctx, slots, dictionaries: () => dictionaries }
 }
 
 test('the client registers an InitMath chip in the composer', () => {
@@ -104,4 +105,24 @@ test('the chip runs /initmath through the host command channel', async () => {
   assert.equal(executed.length, 1)
   assert.equal(executed[0].session, 'session-1')
   assert.equal(executed[0].input, '/initmath')
+})
+
+test('the Russian dictionary is complete and free of Chinese text', () => {
+  const { mod } = loadClient()
+  const { ctx, dictionaries } = makeContext()
+  mod.apply(ctx)
+
+  const { en, ru, zh } = dictionaries()
+  assert.deepEqual(Object.keys(ru).sort(), Object.keys(en).sort())
+  assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort())
+  assert.doesNotMatch(JSON.stringify(ru), /[\u3000-\u9fff\uff00-\uffef]/)
+  assert.equal(ru['init.chip'], 'Подготовить')
+  assert.match(ru['meta.cells'], /^[^|]+\|[^|]+\|[^|]+$/, 'meta.cells needs three plural forms')
+})
+
+test('locale metadata covers the Russian interface', () => {
+  const ru = JSON.parse(readFileSync(join(HERE, '..', 'locale', 'ru.json'), 'utf8'))
+  assert.ok(String(ru.meta.title).length > 0)
+  assert.ok(String(ru.meta.description).length > 0)
+  assert.doesNotMatch(JSON.stringify(ru), /[\u3000-\u9fff\uff00-\uffef]/)
 })

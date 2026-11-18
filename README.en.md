@@ -1,12 +1,14 @@
 # Wolfram Notebook for DeepSeek Harness (`dsh-wolfram-nb`)
 
+> This build is documented primarily in Russian: [README.md](README.md). The Chinese text of the
+> upstream project is kept in [README.zh.md](README.zh.md) and may lag behind the code.
+
 [![topic: dsh-plugin](https://img.shields.io/badge/topic-dsh--plugin-0b7285)](https://github.com/topics/dsh-plugin)
-[![npm](https://img.shields.io/npm/v/dsh-wolfram-nb?label=npm)](https://www.npmjs.com/package/dsh-wolfram-nb)
-[![license: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/nashihang777/dsh-wolfram-nb/blob/main/LICENSE)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[简体中文](README.md) · **English** · [GitHub](https://github.com/nashihang777/dsh-wolfram-nb) · [npm](https://www.npmjs.com/package/dsh-wolfram-nb)
+**English** · [Русский](README.md) · [简体中文](README.zh.md)
 
-![Wolfram Notebook for DeepSeek Harness](https://raw.githubusercontent.com/nashihang777/dsh-wolfram-nb/main/assets/social-preview.png)
+![Wolfram Notebook for DeepSeek Harness](assets/social-preview.png)
 
 > **A DeepSeek Harness plugin** that turns a locally installed Mathematica into an agent-callable
 > tool, and renders the Wolfram notebook live beside the conversation.
@@ -21,32 +23,28 @@ the right side of the conversation.
 
 ## Install and distribution
 
-**From npm (recommended):**
+This fork is built and installed locally (version 1.15.0, bridge 1.3.3):
 
-```
-plugin_manager install_bundle  target=dsh-wolfram-nb@1.6.0
-```
-
-The version may be omitted (defaults to `latest`), or pinned with `@1.6.0`.
-
-**From GitHub:** clone the repository and install its root as a bundle:
-
-```
-git clone https://github.com/nashihang777/dsh-wolfram-nb.git
-plugin_manager install_bundle  target=<absolute path to the clone>
+```bat
+build-tgz.bat            :: build the tarball
+build-tgz.bat install    :: build and install it into the desktop profile
 ```
 
-**From a tarball:** `npm pack` produces `nashihang777-dsh-wolfram-nb-<version>.tgz`; extract it and
-install the extracted directory as a bundle. The tarball contains plugin code only (~28 KB) and no
-Wolfram components.
+`build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
+older build when the version number did not change. Restart DSH completely afterwards. Check with
+`wolfram_notebook action="status"` (`Plugin 1.15.0, bridge: 1.3.3`) or `node scripts/smoke.mjs`
+(11/11).
 
-**Local one-step build (Windows):** run `build-tgz.bat` to produce the tarball, or
-`build-tgz.bat install` to install it into the DSH profile. See [INSTALL.md](INSTALL.md).
+**From a clone:** install the clone directory as a bundle with
+`plugin_manager install_bundle target=<absolute path to the clone>`. The npm package
+`nashihang777-dsh-wolfram-nb` is the upstream project, not this build. See [INSTALL.md](INSTALL.md)
+for the local flow.
 
 The target machine needs Windows and a REPL-capable `math.exe` (Mathematica, or a Wolfram Engine
 installation that ships one).
 
-The maintainer release flow (tag → GitHub Actions → npm) is documented in [RELEASING.md](RELEASING.md).
+The release flow for this fork (version bump, tests, build, tag, push) is documented in
+[RELEASING.md](RELEASING.md).
 
 ## Capabilities
 
@@ -54,16 +52,16 @@ The maintainer release flow (tag → GitHub Actions → npm) is documented in [R
 |---|---|
 | `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
-| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, `status` shows the latest `Print` output, and graphics results are published to the panel |
+| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`list` manage jobs, `status` shows the latest `Print` output, `result` accepts `wait` (up to 300 s) to block until the job finishes, and graphics results are published to the panel |
 | `wolfram_verify` | Independent checks in a throwaway kernel (session definitions cannot skew them): `identity` proves `FullSimplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` simplifies the residual and checks optional initial/boundary `conditions`; `integral` compares with its closed form; `antiderivative` differentiates the claimed antiderivative. Each result carries `status`: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
-| `wolfram_alpha` | Asks Wolfram|Alpha a natural-language query and returns the answer; with `steps` (default `true`) it requests the step-by-step solution when the service offers one and falls back to the plain answer otherwise. Requires internet access |
-| `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context; `clear` drops it |
+| `wolfram_alpha` | Asks Wolfram|Alpha a natural-language query and returns the answer; with `steps` (default `true`) it requests the step-by-step solution when the service offers one and falls back to the plain answer otherwise; `maxChars` (default 4000) caps the answer and says when it was clipped. Requires internet access |
+| `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context (load defaults to the newest save); `clear` drops it |
 | `wolfram_render` | exports `Plot`/`Graphics` to PNG/SVG/PDF/JPG with `ImageResolution`, creating the directory, auto-loading MaTeX when the expression uses it |
 | `wolfram_batch` | runs independent snippets in parallel kernels (`maxParallel`, up to 12 items) and reports OK/FAILED per item |
-| `wolfram_ready` | Reports whether the folder can take a task: `AGENTS.md`/`tools`, the toolchain with the missing names, and the git repository state |
-| `wolfram_check` | Static inspection with CodeInspector before running: syntax errors and suspicious constructs with line numbers; the code is never evaluated |
-| `wolfram_help` | Symbol lookup in the running kernel: matches, readable usage text (box islands flattened without a front end), `SyntaxInformation` (`ArgumentsPattern`), attributes and the real option names with defaults |
-| `wolfram_doc` | Reads the local reference page of a symbol (the "Details" notes) from the installed documentation — offline and version-exact |
+| `wolfram_ready` | Reports whether the folder can take a task: `AGENTS.md`/`tools` (naming what is missing), the toolchain, and the git repository state; the plugin repository is reported as not a calculation folder |
+| `wolfram_check` | Static inspection with CodeInspector before running: syntax errors and suspicious constructs with line numbers; accepts inline `code` or a `path` to a file. The code is never evaluated |
+| `wolfram_help` | Symbol lookup in the running kernel: matches, readable usage text (box islands flattened without a front end), `SyntaxInformation` (`ArgumentsPattern`), attributes and the real option names with defaults; the exact match keeps the full block, neighbours stay one line, `options: false` drops the option list |
+| `wolfram_doc` | Reads the local reference page of a symbol (the "Details" notes) from the installed documentation — offline and version-exact; the page is cached per symbol and every `ReferencePages` section is searched |
 | In-panel notebook picker | The panel's “Open…” button lists the `.nb` files found in the workspace (root, `wolfram-notebooks/`, the current notebook's directory); click to render, or type a path |
 | `/wolfram-open` command | Run `/wolfram-open <path>` in the composer to switch the panel without producing a model message |
 | `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`), creates `tasks\` and `data\`, initializes a local git repository with Git LFS when available (first commit), then reports the environment (Mathematica, PDFConv, Python, MiKTeX, Git, Node); `--no-git` skips git; refuses the plugin repository |
@@ -259,7 +257,7 @@ reload the plugin (in this repository that is done by toggling its enabled state
 
 Tests and checks:
 
-- `npm test` — 37 cases against the real kernel, about 80 s.
+- `npm test` — 59 cases against the real kernel, about 106 s.
 - `node scripts/smoke.mjs` — boots the plugin and calls every tool once (~10 s); use it to accept a
   build after installing. `--with-alpha` adds the Wolfram|Alpha call (needs a network).
 - `build-tgz.bat` validates that `package.json` is clean UTF-8 JSON before packing: PowerShell's
@@ -272,6 +270,6 @@ Tests and checks:
 
 ## License and trademarks
 
-- Licensed under [MIT](https://github.com/nashihang777/dsh-wolfram-nb/blob/main/LICENSE). Version and fix history: [CHANGELOG.md](https://github.com/nashihang777/dsh-wolfram-nb/blob/main/CHANGELOG.md).
+- Licensed under [MIT](LICENSE). Version and fix history: [CHANGELOG.md](CHANGELOG.md).
 - Not affiliated with or endorsed by Wolfram Research; **Mathematica** and **Wolfram Language** are its registered trademarks, used here descriptively only.
 - The plugin ships no Wolfram software, paclets, documentation or brand assets; at runtime it drives the user's own licensed Mathematica. Deploying it as a multi-tenant compute service may conflict with Wolfram's license terms — that call belongs to the deployer.

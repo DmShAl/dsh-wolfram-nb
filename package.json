@@ -1,6 +1,6 @@
 {
   "name": "dsh-wolfram-nb",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -14,13 +14,13 @@
     "wolfram-language",
     "notebook"
   ],
-  "homepage": "https://github.com/nashihang777/dsh-wolfram-nb#readme",
+  "homepage": "https://github.com/DmShAl/dsh-wolfram-nb#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nashihang777/dsh-wolfram-nb.git"
+    "url": "git+https://github.com/DmShAl/dsh-wolfram-nb.git"
   },
   "bugs": {
-    "url": "https://github.com/nashihang777/dsh-wolfram-nb/issues"
+    "url": "https://github.com/DmShAl/dsh-wolfram-nb/issues"
   },
   "engines": {
     "node": ">=20"
