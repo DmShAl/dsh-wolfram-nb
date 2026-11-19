@@ -15,7 +15,7 @@
 ## 2. Проверка
 
 ```bat
-npm.cmd test                 :: 70 тестов против живого ядра, ~129 с
+npm.cmd test                 :: 71 тест против живого ядра, ~130 с
 build-tgz.bat install        :: собрать и поставить в профиль desktop
 node scripts/smoke.mjs       :: 11 шагов, ~10 с
 ```

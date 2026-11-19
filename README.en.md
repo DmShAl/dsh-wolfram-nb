@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.5, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.6, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.5, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.6, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -143,8 +143,10 @@ Next: `node tools\new-task.mjs <name> --title "Human-readable title"` creates `T
 `report.md`, `code.wl`, `_plots\` and `_work\`; compute with the `wolfram_*` tools; run independent
 checks through `tools\python.cmd` (Python 3.14 with numpy/scipy/sympy/mpmath); build the report with
 `tools\build-report.cmd`, check it with `tools\check-report.cmd <report.pdf>` (PDF+DOCX plus
-`pdfcheck`). Session artifacts (`wolfram-plots\`, `wolfram-notebooks\`, `.dsh-wolfram\`) are
-written to the session folder, never to the repository.
+`pdfcheck`). A successful build also keeps a version snapshot in `_versions\<timestamp>\` (disable
+with `--no-snapshot`, take a manual one with `tools\snapshot.cmd`). Session artifacts
+(`wolfram-plots\`, `wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never
+to the repository.
 
 To open the panel manually: right sidebar “+” → Wolfram notebook (the panel registers a guide entry).
 
@@ -274,7 +276,7 @@ reload the plugin (in this repository that is done by toggling its enabled state
 
 Tests and checks:
 
-- `npm test` — 70 cases against the real kernel, about 129 s.
+- `npm test` — 71 cases against the real kernel, about 130 s.
 - `node scripts/smoke.mjs` — boots the plugin and calls every tool once (~10 s); use it to accept a
   build after installing. `--with-alpha` adds the Wolfram|Alpha call (needs a network).
 - `build-tgz.bat` validates that `package.json` is clean UTF-8 JSON before packing: PowerShell's

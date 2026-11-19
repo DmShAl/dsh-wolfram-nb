@@ -1157,3 +1157,45 @@ test('Cyrillic survives the marker transport in wolfram_check messages', async (
 
 
 
+
+test('version-snapshot copies the task files and never overwrites a version', (t) => {
+  const base = mkdtempSync(join(tmpdir(), 'wl-versions-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  const task = join(base, 'task')
+  mkdirSync(join(task, '_plots'), { recursive: true })
+  mkdirSync(join(task, '_work'), { recursive: true })
+  writeFileSync(join(task, 'TASK.md'), 'TASK', 'utf8')
+  writeFileSync(join(task, 'report.md'), 'v1', 'utf8')
+  writeFileSync(join(task, 'code.wl'), '(* v1 *)', 'utf8')
+  writeFileSync(join(task, '_plots', 'fig.png'), 'PNG', 'utf8')
+
+  const script = join(process.cwd(), 'workspace', 'tools', 'version-snapshot.mjs')
+  const run = () => spawnSync(process.execPath, [script, task], { encoding: 'utf8' })
+  const first = run()
+  assert.equal(first.status, 0, first.stderr)
+  const versions = readdirSync(join(task, '_versions'))
+  assert.equal(versions.length, 1)
+  const snapshot = join(task, '_versions', versions[0])
+  for (const name of ['TASK.md', 'report.md', 'code.wl']) {
+    assert.equal(existsSync(join(snapshot, name)), true, `${name} was not copied`)
+  }
+  assert.equal(existsSync(join(snapshot, '_plots', 'fig.png')), true)
+  assert.equal(existsSync(join(snapshot, '_work')), false, '_work must not be copied')
+
+  // A second snapshot keeps the first one intact.
+  writeFileSync(join(task, 'report.md'), 'v2', 'utf8')
+  const second = run()
+  assert.equal(second.status, 0, second.stderr)
+  const all = readdirSync(join(task, '_versions')).sort()
+  assert.equal(all.length, 2)
+  assert.equal(readFileSync(join(task, '_versions', all[0], 'report.md'), 'utf8'), 'v1')
+  assert.equal(readFileSync(join(task, '_versions', all[1], 'report.md'), 'utf8'), 'v2')
+
+  // Nothing to copy: report and do not create an empty _versions directory.
+  const empty = join(base, 'empty')
+  mkdirSync(empty)
+  const noop = spawnSync(process.execPath, [script, empty], { encoding: 'utf8' })
+  assert.equal(noop.status, 0)
+  assert.match(noop.stdout, /nothing to snapshot/)
+  assert.equal(existsSync(join(empty, '_versions')), false)
+})

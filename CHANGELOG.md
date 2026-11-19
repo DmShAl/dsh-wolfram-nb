@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.16.6 — 2026-11-19
+
+Task versions and the `check-report` render location. Bridge unchanged (1.3.5).
+
+### Added
+
+- **Task versions in `_versions/<YYYY_MM_DD-HH_MM_SS>/`** (local time, sorts
+  lexicographically). `tools/version-snapshot.mjs` copies `TASK.md`, `report.md`/`report.tex`,
+  every `*.wl` in the task root, `report.pdf`, `report.docx` and `_plots/` (recursively); it
+  skips `_work/`, `_data/`, `_versions/` and hidden service directories, adds `-2`, `-3` when two
+  snapshots fall into one second, prints the created directory, and does not create an empty
+  `_versions/` when there is nothing to copy.
+- **`tools/snapshot.cmd <task-dir>`** — manual snapshot before editing `code.wl`/`report.md`.
+- **`build-report.cmd` snapshots after a successful build** — one directory per source directory
+  per call, printed after the conversion; `--no-snapshot` disables it for that run. Canonical
+  `report.md/.pdf/.docx` and `code.wl` stay current; failed conversions create no snapshot.
+- `workspace/AGENTS.md` «Версии задачи», `tools/README.md` and `workspace/README.md` describe the
+  new workflow; `task-template.md` mentions `_versions/`; both READMEs got a quickstart line.
+  `_versions/` is deliberately not added to `.gitignore` — the user decides what to commit.
+
+### Fixed
+
+- **`check-report.cmd` no longer drops `page1.png` next to the report.** The default is now
+  `--pages 1 --out "<pdf-dir>\_work"`; explicit arguments are forwarded unchanged.
+- **`build-report.cmd`: `shift` in the argument loop also shifted `%0`**, so `%~dp0` resolved to
+  the report's directory instead of `tools\`; the script directory is captured before parsing.
+- **`build-report.cmd`: an unescaped `)` inside `echo` closed the `--no-snapshot` block**, leaving
+  `exit /b 0` unconditional — the snapshot code was skipped and `--no-snapshot` printed a broken
+  message.
+
+### Tests
+
+- 71 tests: `version-snapshot` copies the expected files, never overwrites the first snapshot,
+  skips `_work/`, and creates no directory when there is nothing to copy.
+
 ## 1.16.5 — 2026-11-19
 
 Math-workflow release: less manual routine per task, standard checks. Bridge unchanged (1.3.5).

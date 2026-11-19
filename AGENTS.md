@@ -7,12 +7,12 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.16.5** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.16.6** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin remove` + `add file:<tgz>` (сначала удаление: pnpm иначе оставляет файлы
   прежней сборки с тем же номером версии). Подробности в `INSTALL.md`.
-- Тесты: `npm test` (node --test, живое ядро, 70 тестов, ~129 с); приёмка установленной
+- Тесты: `npm test` (node --test, живое ядро, 71 тест, ~130 с); приёмка установленной
   сборки — `node scripts/smoke.mjs` (14 шагов, ~12 с). `npm.cmd` доступен
   (`C:\Program Files\nodejs`), Node v24.21.0.
 - Ядра стартуют в UTF-8 (`bridge.wl`, переопределяется `DSH_WOLFRAM_CHARACTER_ENCODING`).
@@ -83,7 +83,8 @@
   самодостаточные: инструменты, Mathematica, рисунки, отчёты — глобальный `~\.dsh\AGENTS.md`
   для расчётов не нужен),
   `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `check-report.cmd`,
-  `extract-md.cmd`, `python.cmd`, шаблоны; краткая таблица — `tools/README.md`),
+  `extract-md.cmd`, `python.cmd`, `snapshot.cmd`, `version-snapshot.mjs`, шаблоны;
+  краткая таблица — `tools/README.md`),
   `NOTES.md`, `gitignore` (шаблон `.gitignore`; npm не пропускает файл с точкой в имени,
   `scaffold.js` переименовывает его при копировании). Его копируют в новое место и работают
   там — расчёты в самом репозитории не ведём, чтобы не смешивать код и результаты.
