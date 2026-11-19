@@ -7,6 +7,7 @@ rem   tools\build-report.cmd <report.md|report.tex> [more ...]
 rem   tools\build-report.cmd --check                     PDFConv environment report only
 rem   tools\build-report.cmd --no-overwrite <files ...>  fail instead of replacing outputs
 rem   tools\build-report.cmd --no-snapshot <files ...>   do not create _versions\<timestamp>\
+rem   tools\build-report.cmd --keep <N> <files ...>       keep only the newest N snapshots (default 20)
 rem
 rem Outputs <name>.docx and <name>.pdf beside each source file. Existing outputs
 rem are replaced (that is the normal rebuild); the script names each file it
@@ -36,6 +37,8 @@ set "GUARD="
 set "FILES="
 set "WHY="
 set "NO_SNAPSHOT="
+set "SNAP_KEEP="
+set "KEEPARG="
 
 :parse
 if "%~1"=="" goto afterparse
@@ -53,6 +56,12 @@ if /I "%~1"=="--no-overwrite" (
 )
 if /I "%~1"=="--no-snapshot" (
     set "NO_SNAPSHOT=1"
+    shift
+    goto parse
+)
+if /I "%~1"=="--keep" (
+    set "SNAP_KEEP=%~2"
+    shift
     shift
     goto parse
 )
@@ -97,6 +106,7 @@ if not exist "%NODE%" (
     echo [build-report] warning: node not found at %NODE%; no _versions\ snapshot
     exit /b 0
 )
+if defined SNAP_KEEP set "KEEPARG=--keep %SNAP_KEEP%"
 
 rem One snapshot per source directory: several files in one task must not create
 rem several version directories. The directory name is sanitized into a variable
@@ -108,7 +118,7 @@ for %%F in (%FILES%) do (
     set "SAFE=!SAFE: =#!"
     if not defined SNAP_!SAFE! (
         set "SNAP_!SAFE!=1"
-        "%NODE%" "%TOOLS%version-snapshot.mjs" "%%~dpF." --source "%%~nxF"
+        "%NODE%" "%TOOLS%version-snapshot.mjs" "%%~dpF." --source "%%~nxF" %KEEPARG%
     )
 )
 exit /b 0
@@ -118,6 +128,7 @@ echo Usage: build-report.cmd ^<report.md^> [more.md ...]
 echo        build-report.cmd --check
 echo        build-report.cmd --no-overwrite ^<report.md^> [more.md ...]
 echo        build-report.cmd --no-snapshot ^<report.md^> [more.md ...]
+echo        build-report.cmd --keep N ^<report.md^> [more.md ...]
 echo Outputs ^<name^>.docx and ^<name^>.pdf next to each source file.
 echo After a successful build each source directory gets one _versions\^<timestamp^>\ snapshot.
 echo PDFConv supports .md, .markdown, .tex and .latex inputs.

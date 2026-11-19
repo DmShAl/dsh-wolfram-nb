@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { apply } from '../index.js'
-import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot } from '../scaffold.js'
+import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot, probePythonModules } from '../scaffold.js'
 
 /**
  * Boot the plugin against a fake Cordis context and the real local kernel.
@@ -1198,4 +1198,128 @@ test('version-snapshot copies the task files and never overwrites a version', (t
   assert.equal(noop.status, 0)
   assert.match(noop.stdout, /nothing to snapshot/)
   assert.equal(existsSync(join(empty, '_versions')), false)
+})
+
+test('wolfram_eval and wolfram_job accept a path to a .wl file', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+  const dir = mkdtempSync(join(tmpdir(), 'wl-path-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'probe.wl')
+  writeFileSync(file, 'probeValue = 2 + 2;\nPrint["PROBE-", probeValue];\nprobeValue\n', 'utf8')
+
+  const evaluated = await tools.get('wolfram_eval').execute({ path: file }, {})
+  assert.equal(evaluated.ok, true)
+  assert.match(evaluated.summary, /PROBE-4/)
+
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({ action: 'submit', path: file }, {})
+  assert.match(submitted.summary, /Job j/)
+  const result = await job.execute({ action: 'result', id: submitted.jobId, wait: 120 }, {})
+  assert.equal(result.ok, true)
+  assert.match(result.summary, /PROBE-4/)
+  const logRel = (result.summary.match(/^Log: (.+)$/m) ?? [])[1]
+  assert.ok(logRel, 'the job log path is missing')
+  assert.equal(existsSync(join(process.cwd(), logRel)), true)
+  const log = await job.execute({ action: 'log', id: submitted.jobId }, {})
+  assert.match(log.summary, /PROBE-4/)
+
+  await assert.rejects(
+    () => tools.get('wolfram_eval').execute({ path: join(dir, 'no-such.wl') }, {}),
+    /no such file/,
+  )
+  await assert.rejects(
+    () => tools.get('wolfram_eval').execute({ code: '1+1', path: file }, {}),
+    /exactly one/,
+  )
+})
+
+test('wolfram_ready deep reports Python and Mathematica packages', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 60_000 })
+  teardown(t, cleanups)
+  const pythonPath = 'C:\\Tools\\Scripts\\Python314\\python.exe'
+  if (!existsSync(pythonPath)) return t.skip('Python 3.14 is not installed')
+  const deep = await tools.get('wolfram_ready').execute({ deep: true }, {})
+  assert.match(deep.summary, /Python packages/)
+  assert.match(deep.summary, /mpmath/)
+  assert.match(deep.summary, /Mathematica packages/)
+  assert.match(deep.summary, /MaTeX/)
+  const shallow = await tools.get('wolfram_ready').execute({}, {})
+  assert.doesNotMatch(shallow.summary, /Python packages/)
+})
+
+test('probePythonModules reports a missing module instead of failing', () => {
+  const pythonPath = 'C:\\Tools\\Scripts\\Python314\\python.exe'
+  if (!existsSync(pythonPath)) return
+  const probe = probePythonModules(pythonPath, [
+    { label: 'numpy', module: 'numpy', distribution: 'numpy' },
+    { label: 'no-such-module-xyz', module: 'no_such_module_xyz', distribution: 'no-such-module-xyz' },
+  ])
+  assert.equal(probe.ok, false)
+  assert.match(String(probe.versions.numpy), /^\d+/)
+  assert.equal(probe.versions['no-such-module-xyz'], null)
+  assert.deepEqual(probe.missing, ['no-such-module-xyz'])
+})
+
+test('version-snapshot dedupes identical content and keeps the newest N', (t) => {
+  const base = mkdtempSync(join(tmpdir(), 'wl-versions-keep-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  const task = join(base, 'task')
+  mkdirSync(join(task, '_plots'), { recursive: true })
+  writeFileSync(join(task, 'TASK.md'), 'TASK', 'utf8')
+  writeFileSync(join(task, 'report.md'), 'v1', 'utf8')
+  writeFileSync(join(task, 'code.wl'), '(* v1 *)', 'utf8')
+  writeFileSync(join(task, '_plots', 'fig.png'), 'PNG', 'utf8')
+
+  const script = join(process.cwd(), 'workspace', 'tools', 'version-snapshot.mjs')
+  const run = (...args) => spawnSync(process.execPath, [script, task, ...args], { encoding: 'utf8' })
+  const versions = () => readdirSync(join(task, '_versions')).sort()
+
+  const first = run()
+  assert.equal(first.status, 0, first.stderr)
+  assert.equal(versions().length, 1)
+  const second = run()
+  assert.equal(second.status, 0, second.stderr)
+  assert.match(second.stdout, /snapshot unchanged/)
+  assert.equal(versions().length, 1)
+
+  writeFileSync(join(task, 'report.md'), 'v2', 'utf8')
+  assert.equal(run().status, 0)
+  assert.equal(versions().length, 2)
+  assert.equal(run('--force').status, 0)
+  assert.equal(versions().length, 3)
+
+  // --keep only removes snapshot directories; an unrelated entry stays.
+  mkdirSync(join(task, '_versions', 'keepme'))
+  writeFileSync(join(task, '_versions', 'keepme', 'keep.txt'), 'keep', 'utf8')
+  assert.equal(run('--keep', '1').status, 0)
+  const left = versions()
+  assert.equal(left.length, 2)
+  assert.equal(left.includes('keepme'), true)
+  assert.equal(existsSync(join(task, '_versions', 'keepme', 'keep.txt')), true)
+})
+
+test('wolfram_job status is short by default and verbose on request', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({
+    action: 'submit',
+    code: 'Do[Print["step ", i]; Pause[0.25], {i, 1, 12}]',
+  }, {})
+  let status = null
+  for (let i = 0; i < 40; i += 1) {
+    status = await job.execute({ action: 'status', id: submitted.jobId }, {})
+    const lines = (status.summary.match(/^step /gm) ?? []).length
+    if (status.summary.includes('Recent output') && lines >= 2) break
+    if (status.summary.includes('done')) break
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  const short = await job.execute({ action: 'status', id: submitted.jobId }, {})
+  const verbose = await job.execute({ action: 'status', id: submitted.jobId, verbose: true }, {})
+  if (short.summary.includes('Recent output')) {
+    assert.ok((short.summary.match(/^step /gm) ?? []).length <= 4)
+    assert.match(verbose.summary, /Progress:/)
+  }
+  await job.execute({ action: 'cancel', id: submitted.jobId }, {})
 })

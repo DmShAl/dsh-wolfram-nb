@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.16.7 — 2026-11-19
+
+### Added
+
+- **`path` on `wolfram_eval` and `wolfram_job`.** Both accept `path` (absolute or relative to the
+  workspace) instead of `code`/`cells` and run `Get[<file>]` in the kernel, so a task's `code.wl`
+  needs no manual escaping; exactly one of `code`, `cells`, `path` is allowed, the file must exist
+  and end in `.wl`, and the validation happens before a kernel is started. A job submitted with
+  `path` defaults its title to the file name, and the full log/`result`/`log` behave as before.
+- **`deep: true` for `wolfram_ready`.** Beyond the existing components it imports and versions the
+  Python packages (numpy, scipy, mpmath, sympy, pymupdf, python-docx) in a separate process and
+  reports the installed Mathematica packages (MaTeX, FeynCalc, FeynArts, xAct) with paths and
+  paclet versions; optional packages are listed but never turn `ok` false. The plain call is
+  unchanged.
+- **Snapshot retention and deduplication.** `version-snapshot.mjs` keeps the newest 20 snapshots by
+  default (`--keep N` or `DSH_SNAPSHOT_KEEP`), removes only directories named
+  `YYYY_MM_DD-HH_MM_SS[-N]`, and skips a snapshot whose content (paths + bytes) equals the latest
+  one (`snapshot unchanged`); `--force` creates it anyway. `snapshot.cmd` and `build-report.cmd`
+  forward `--keep` (`build-report --keep N`).
+- `*.latex.log` is ignored by the workspace `.gitignore` (a build artifact); `_versions/` stays
+  unignored on purpose.
+
+### Changed
+
+- **`wolfram_job status` is short by default**: state, elapsed time, the last 4 progress lines and
+  the log path; `verbose: true` restores the previous 10-line progress list. `log`/`result` are
+  unchanged.
+
+### Tests
+
+- 76 tests: `path` for eval and job (including a missing file and the `code`+`path` conflict),
+  deep `wolfram_ready`, `probePythonModules` with a missing module, snapshot dedup/`--force`/
+  `--keep` with an unrelated directory, short vs verbose job status.
+
 ## 1.16.6 — 2026-11-19
 
 Task versions and the `check-report` render location. Bridge unchanged (1.3.5).

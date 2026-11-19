@@ -7,7 +7,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
 import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot, gitState } from './scaffold.js'
@@ -662,6 +662,28 @@ export function apply(ctx, config = {}) {
   }
 
   /**
+   * `code`, `cells` or `path` — exactly one. With `path`, the kernel runs
+   * `Get["<file>"]` (UTF-8 bridge), so callers need no manual escaping or file reading;
+   * the path is validated here, before a kernel is started.
+   */
+  const cellsFromArgs = (args, context, label) => {
+    const code = typeof args?.code === 'string' ? args.code : ''
+    const requestedPath = typeof args?.path === 'string' ? args.path.trim() : ''
+    const hasCells = Array.isArray(args?.cells) && args.cells.length > 0
+    const hasCode = code.trim() !== ''
+    const sources = [hasCode, hasCells, requestedPath !== ''].filter(Boolean).length
+    if (sources > 1) throw new Error(`${label}: pass exactly one of \`code\`, \`cells\` or \`path\`.`)
+    if (requestedPath !== '') {
+      const file = resolveWorkspacePath(context.cwd, requestedPath, requestedPath)
+      if (!/\.wl$/i.test(file)) throw new Error(`${label}: \`path\` must point to a .wl file: ${file}`)
+      if (!existsSync(file)) throw new Error(`${label}: no such file: ${file}`)
+      return [{ type: 'input', code: `Get[${wlString(file)}]` }]
+    }
+    if (!hasCode && !hasCells) throw new Error(`${label} needs \`code\`, \`cells\` or \`path\`.`)
+    return normalizeCells(args)
+  }
+
+  /**
    * Run one input cell and read the JSON payload it prints after `marker`.
    * Used by wolfram_verify / wolfram_state / wolfram_render so their results do
    * not have to be reverse-engineered from the rendered notebook document.
@@ -723,7 +745,11 @@ export function apply(ctx, config = {}) {
       properties: {
         code: {
           type: 'string',
-          description: 'Wolfram Language source for a single input cell. Use this or `cells`.',
+          description: 'Wolfram Language source for a single input cell. Use this or `cells` or `path`.',
+        },
+        path: {
+          type: 'string',
+          description: 'Path to a .wl file (absolute or relative to the workspace); the kernel runs Get[<path>] as one input cell. Use it instead of `code`/`cells`.',
         },
         cells: {
           type: 'array',
@@ -777,8 +803,7 @@ export function apply(ctx, config = {}) {
     async execute(args, exec) {
       stats.evaluations += 1
       const context = await kernelContext(exec)
-      const cells = normalizeCells(args)
-      if (cells.length === 0) throw new Error('wolfram_eval needs `code` or at least one input cell.')
+      const cells = cellsFromArgs(args, context, 'wolfram_eval')
       if (args?.reset === true) disposeKernel(context.sessionId)
       const title = typeof args?.title === 'string' ? args.title : ''
       const exportNotebook = args?.exportNotebook === true
@@ -1012,6 +1037,10 @@ export function apply(ctx, config = {}) {
         action: { type: 'string', enum: ['submit', 'status', 'result', 'cancel', 'log', 'list'] },
         id: { type: 'string', description: 'Job id for status/result/cancel/log.' },
         code: { type: 'string', description: 'Wolfram Language source for a submit.' },
+        path: {
+          type: 'string',
+          description: 'Path to a .wl file for a submit (absolute or relative to the workspace); runs Get[<path>]. Use it instead of `code`/`cells`.',
+        },
         cells: {
           type: 'array',
           description: 'Ordered cells for a submit (same shape as wolfram_eval).',
@@ -1032,6 +1061,10 @@ export function apply(ctx, config = {}) {
         full: { type: 'boolean', description: 'action="result": append the complete console from the job log (default false).' },
         maxChars: { type: 'number', description: 'action="log": characters to return from the end of the log (default 20000, max 200000).' },
         tail: { type: 'number', description: 'action="log": return only the last N lines instead of maxChars.' },
+        verbose: {
+          type: 'boolean',
+          description: 'action="status": show the full progress list (default false: short summary with the last few lines).',
+        },
       },
       required: ['action'],
     },
@@ -1063,14 +1096,20 @@ export function apply(ctx, config = {}) {
         }
       }
       if (action === 'submit') {
-        const cells = normalizeCells(args)
-        if (cells.length === 0) throw new Error('wolfram_job submit needs `code` or at least one input cell.')
+        const cells = cellsFromArgs(args, context, 'wolfram_job submit')
         prune()
         if (jobs.size >= MAX_JOBS) throw new Error(`Too many jobs (max ${MAX_JOBS}); wait for finished jobs to expire.`)
         const requested = Number(args?.timeoutMs)
         const jobTimeout = Number.isFinite(requested) && requested > 0 ? requested : Math.max(timeoutMs, 30 * 60_000)
         const id = `j${++jobSeq}x${Date.now().toString(36)}`
-        const title = typeof args?.title === 'string' ? args.title : ''
+        const pathArg = typeof args?.path === 'string' ? args.path.trim() : ''
+        const titleArg = typeof args?.title === 'string' ? args.title.trim() : ''
+        // With `path` the file name is the natural default title.
+        const title = titleArg !== ''
+          ? titleArg
+          : pathArg !== ''
+            ? basename(resolveWorkspacePath(context.cwd, pathArg, pathArg))
+            : ''
         let nbPath = null
         if (args?.exportNotebook === true) {
           const dir = join(context.cwd, EXPORT_DIR)
@@ -1127,6 +1166,7 @@ export function apply(ctx, config = {}) {
       }
       const elapsed = Math.round(((job.finishedAt ?? Date.now()) - job.submittedAt) / 1000)
       if (action === 'status') {
+        const verbose = args?.verbose === true
         const suffix = job.status === 'failed' && job.error !== null ? ` Error: ${job.error}` : ''
         let extra = ''
         if (job.status === 'queued') {
@@ -1135,7 +1175,10 @@ export function apply(ctx, config = {}) {
             .findIndex((item) => item.id === job.id) + 1
           extra = `\nPosition in queue: ${position}.`
         } else if (job.status === 'running' && job.progress.length > 0) {
-          extra = `\nProgress:\n${job.progress.slice(-10).join('\n')}`
+          // Short by default: the log file has the rest. verbose restores the old list.
+          const lines = verbose ? 10 : 4
+          const label = verbose ? 'Progress' : 'Recent output'
+          extra = `\n${label}:\n${job.progress.slice(-lines).join('\n')}`
         }
         if (job.logPath !== null) extra += `\nLog: ${displayPath(job.cwd, job.logPath)}`
         return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${extra}`, jobId: job.id }
@@ -2167,7 +2210,15 @@ export function apply(ctx, config = {}) {
       'the local git repository and the toolchain (Mathematica, PDFConv, Python, MiKTeX, Git, Node).',
       'Call it at the start of a session in a prepared folder, or right after /initmath, and confirm the result to the user.',
     ].join(' '),
-    parameters: { type: 'object', properties: {} },
+    parameters: {
+      type: 'object',
+      properties: {
+        deep: {
+          type: 'boolean',
+          description: 'Also check the Python package set (numpy/scipy/mpmath/sympy/pymupdf/python-docx) and installed Mathematica packages (MaTeX, FeynCalc, FeynArts, xAct); default false.',
+        },
+      },
+    },
     output: {
       schema: {
         type: 'object',
@@ -2194,7 +2245,8 @@ export function apply(ctx, config = {}) {
           // make it a place for calculations.
           ? 'Workspace: this is the plugin repository — run /initmath in a separate folder for calculations'
           : `Workspace: missing ${[hasAgents ? '' : 'AGENTS.md', hasTools ? '' : 'tools/'].filter(Boolean).join(' and ')} — run /initmath to prepare this folder`
-      const env = checkEnvironment()
+      const deep = args?.deep === true
+      const env = checkEnvironment({ deep })
       const found = env.filter((item) => item.ok).length
       const missing = env.filter((item) => !item.ok).map((item) => item.name)
       const gitInfo = gitState(cwd)
@@ -2202,13 +2254,21 @@ export function apply(ctx, config = {}) {
         `${prepared ? 'Ready' : 'Not prepared'}: ${cwd}`,
         workspaceLine,
         `Environment: ${found}/${env.length} OK${missing.length === 0 ? '' : ` (missing: ${missing.join(', ')})`}`,
+      ]
+      if (deep) {
+        for (const name of ['Python packages', 'Mathematica packages']) {
+          const item = env.find((entry) => entry.name === name)
+          if (item !== undefined) lines.push(`${item.ok ? 'OK' : 'Missing'}: ${name} — ${item.detail}`)
+        }
+      }
+      lines.push(
         gitInfo.repo
           ? `Git: ${gitInfo.branch}, ${gitInfo.commits} commit(s), ${gitInfo.dirty ? 'uncommitted changes' : 'clean'}`
           : 'Git: no repository — /initmath creates one, or run git init',
         prepared && found === env.length
           ? 'All good — ready for a task.'
           : 'Not everything is in place; see the lines above.',
-      ]
+      )
       return { ok: prepared && found === env.length, prepared, envOk: found, envTotal: env.length, summary: lines.join('\n') }
     },
   }

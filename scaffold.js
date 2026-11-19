@@ -119,11 +119,95 @@ function findPdfConv() {
   return { detail: 'convert.py not found (set DSH_PDFCONV or install dsh-pdfconv)' }
 }
 
+/** Python modules the deep environment check imports (label, module, distribution, optional). */
+const DEEP_PYTHON_MODULES = [
+  { label: 'numpy', module: 'numpy', distribution: 'numpy' },
+  { label: 'scipy', module: 'scipy', distribution: 'scipy' },
+  { label: 'mpmath', module: 'mpmath', distribution: 'mpmath' },
+  { label: 'sympy', module: 'sympy', distribution: 'sympy' },
+  { label: 'pymupdf', module: 'pymupdf', distribution: 'pymupdf', optional: true },
+  { label: 'python-docx', module: 'docx', distribution: 'python-docx', optional: true },
+]
+
+/**
+ * Import the given modules in a separate Python process and report versions.
+ * A missing module is reported per label instead of failing the whole check; the
+ * deep `ok` only requires the non-optional ones (numpy, scipy, mpmath, sympy).
+ */
+export function probePythonModules(pythonPath, modules = DEEP_PYTHON_MODULES) {
+  if (typeof pythonPath !== 'string' || pythonPath === '') {
+    return { ok: false, versions: {}, missing: modules.map((entry) => entry.label), error: 'Python is not installed' }
+  }
+  const spec = JSON.stringify(modules.map((entry) => ({ label: entry.label, module: entry.module, distribution: entry.distribution })))
+  const script = [
+    'import json',
+    `spec = json.loads(${JSON.stringify(spec)})`,
+    'import importlib, importlib.metadata as md',
+    'out = {}',
+    'for item in spec:',
+    '    version = None',
+    '    try:',
+    '        importlib.import_module(item["module"])',
+    '        try: version = md.version(item["distribution"])',
+    '        except Exception: version = "installed"',
+    '    except Exception:',
+    '        version = None',
+    '    out[item["label"]] = version',
+    'print(json.dumps(out))',
+  ].join('\n')
+  const result = spawnSync(pythonPath, ['-c', script], { encoding: 'utf8', windowsHide: true })
+  if (result.error !== undefined || result.status !== 0) {
+    const error = String(result.stderr ?? result.error?.message ?? 'python failed').trim().split('\n').slice(-1)[0]
+    return { ok: false, versions: {}, missing: modules.map((entry) => entry.label), error }
+  }
+  let versions = {}
+  try {
+    versions = JSON.parse(String(result.stdout ?? '').trim())
+  } catch {
+    return { ok: false, versions: {}, missing: modules.map((entry) => entry.label), error: 'python printed no JSON' }
+  }
+  const missing = modules.filter((entry) => versions[entry.label] === null || versions[entry.label] === undefined).map((entry) => entry.label)
+  const optionalMissing = missing.filter((label) => modules.find((entry) => entry.label === label)?.optional === true)
+  return { ok: missing.length === optionalMissing.length, versions, missing }
+}
+
+/** Wolfram applications a session may use; the two required ones gate the deep check. */
+const MATHEMATICA_PACKAGES = [
+  { label: 'MaTeX', candidates: ['MaTeX'] },
+  { label: 'FeynCalc', candidates: ['FeynCalc'] },
+  { label: 'FeynArts', candidates: ['FeynArts', join('FeynCalc', 'FeynArts')], optional: true },
+  { label: 'xAct', candidates: ['xAct'], optional: true },
+]
+
+/** Directory where Wolfram applications are installed on this machine. */
+export function mathematicaApplicationsRoot() {
+  const appData = typeof process.env.APPDATA === 'string' && process.env.APPDATA.trim() !== ''
+    ? process.env.APPDATA.trim()
+    : join(homedir(), 'AppData', 'Roaming')
+  return join(appData, 'Wolfram', 'Applications')
+}
+
+function pacletVersion(dir) {
+  for (const name of ['PacletInfo.wl', 'PacletInfo.m', 'PacletInfo']) {
+    const file = join(dir, name)
+    if (!existsSync(file)) continue
+    try {
+      const text = readFileSync(file, 'utf8')
+      const match = /"?Version"?\s*->\s*"([^"]+)"/.exec(text)
+      if (match !== null) return match[1]
+    } catch { /* unreadable PacletInfo is not fatal */ }
+  }
+  return null
+}
+
 /**
  * What a calculation session needs on this machine. Returns [{ name, ok, detail }];
  * `detail` is the path that was found or a one-line hint on how to fix it.
+ * `deep: true` adds the Python package set and the installed Mathematica packages;
+ * optional packages are listed but never make `ok` false.
  */
-export function checkEnvironment() {
+export function checkEnvironment(options = {}) {
+  const deep = options?.deep === true
   const items = []
 
   try {
@@ -176,6 +260,45 @@ export function checkEnvironment() {
   })
 
   items.push({ name: 'Node', ok: true, detail: process.execPath })
+
+  if (deep) {
+    // Python packages: import each one in its own process, so a broken module cannot
+    // take the check down with it. numpy/scipy/mpmath/sympy are required; pymupdf and
+    // python-docx are listed because pdfcheck/extract-md use them.
+    const probe = probePythonModules(python !== null ? python : '')
+    const versionText = DEEP_PYTHON_MODULES
+      .map((entry) => `${entry.label} ${probe.versions[entry.label] ?? 'missing'}`)
+      .join(', ')
+    const missingRequired = probe.missing.filter((label) => DEEP_PYTHON_MODULES.find((entry) => entry.label === label)?.optional !== true)
+    items.push({
+      name: 'Python packages',
+      ok: probe.error === undefined && missingRequired.length === 0,
+      detail: probe.error !== undefined
+        ? `${probe.error} (checked: ${versionText})`
+        : `${versionText}${probe.missing.length === 0 ? '' : ` (missing: ${probe.missing.join(', ')})`}`,
+    })
+
+    const root = mathematicaApplicationsRoot()
+    const found = []
+    const missing = []
+    for (const pkg of MATHEMATICA_PACKAGES) {
+      const path = pkg.candidates.map((candidate) => join(root, candidate)).find((candidate) => existsSync(candidate))
+      if (path === undefined) {
+        missing.push(pkg.optional === true ? `${pkg.label} (optional)` : pkg.label)
+        continue
+      }
+      const version = pacletVersion(path)
+      found.push(`${pkg.label}${version === null ? '' : ` ${version}`} — ${path}`)
+    }
+    const missingRequiredWl = missing.filter((label) => !label.endsWith('(optional)'))
+    items.push({
+      name: 'Mathematica packages',
+      ok: existsSync(root) && missingRequiredWl.length === 0,
+      detail: existsSync(root)
+        ? `root ${root}${found.length === 0 ? '' : `; ${found.join('; ')}`}${missing.length === 0 ? '' : ` (missing: ${missing.join(', ')})`}`
+        : `applications directory not found: ${root}`,
+    })
+  }
   return items
 }
 

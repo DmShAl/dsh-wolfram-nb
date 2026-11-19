@@ -4,7 +4,9 @@ rem
 rem Usage:
 rem   tools\snapshot.cmd <task-dir>
 rem   tools\snapshot.cmd <task-dir> --source report.md
+rem   tools\snapshot.cmd <task-dir> --keep 5 --force
 rem
+rem An identical snapshot is skipped ("snapshot unchanged"); --force creates it anyway.
 rem build-report.cmd calls the same snapshot automatically after a successful build;
 rem use this wrapper to keep a version before editing code.wl/report.md.
 setlocal EnableExtensions
@@ -30,7 +32,8 @@ if /I "%~1"=="-h" goto usage
 exit /b %errorlevel%
 
 :usage
-echo Usage: snapshot.cmd ^<task-dir^> [--source ^<name^>]
+echo Usage: snapshot.cmd ^<task-dir^> [--source ^<name^>] [--keep N] [--force]
 echo   Copies TASK.md, report.md/.tex, *.wl, report.pdf/.docx and _plots/
 echo   into ^<task-dir^>\_versions\^<YYYY_MM_DD-HH_MM_SS^>\ (sortable, never overwritten).
+echo   Identical content is skipped; --keep N keeps only the newest N snapshots (default 20).
 exit /b 2
