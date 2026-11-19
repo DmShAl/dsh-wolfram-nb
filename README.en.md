@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.8, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.9, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.8, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.9, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -69,7 +69,7 @@ The release flow for this fork (version bump, tests, build, tag, push) is docume
 | `/initmath` command | Prepare a calculation folder: copies `workspace\` (`AGENTS.md`, `tools\`), creates `tasks\` and `data\`, initializes a local git repository with Git LFS when available (first commit), then reports the environment (Mathematica, PDFConv, Python, MiKTeX, Git, Node); `--no-git` skips git; refuses the plugin repository |
 | `/mathsave` command | Stage and commit the session folder to its local git repository (`/mathsave "message"`) |
 | `/mathcheck` command | The same environment report without touching any files |
-| `InitMath` button | Chip left of the composer (next to Compact): runs `/initmath` for the session folder and shows the full report (copied files + environment) in a popover, no model message |
+| `Init Math` button | Chip left of the composer (next to Compact): runs `/initmath` for the session folder and shows the full report (copied files + environment) in a popover, no model message |
 | Right-side notebook panel | Renders titles, body text, input cells, MathML formulas, PNG graphics and messages beside the conversation |
 | Persistent kernel | One long-lived `math.exe` per session; variables and definitions survive across calls |
 | `.nb` export (opt-in) | Pass `exportNotebook: true` to also write the evaluation as a real Mathematica notebook file under `wolfram-notebooks/`; by default the panel renders the document and nothing is written to disk |

@@ -116,7 +116,7 @@ test('the Russian dictionary is complete and free of Chinese text', () => {
   assert.deepEqual(Object.keys(ru).sort(), Object.keys(en).sort())
   assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort())
   assert.doesNotMatch(JSON.stringify(ru), /[\u3000-\u9fff\uff00-\uffef]/)
-  assert.equal(ru['init.chip'], 'Подготовить')
+  assert.equal(ru['init.chip'], 'Init Math')
   assert.match(ru['meta.cells'], /^[^|]+\|[^|]+\|[^|]+$/, 'meta.cells needs three plural forms')
 })
 

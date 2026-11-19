@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.9 — 2026-11-19
+
+### Changed
+
+- **The InitMath chip is called “Init Math” in every locale** (was `InitMath` in English/Chinese
+  and «Подготовить» in Russian). The command remains `/initmath`, the chip id and behaviour are
+  unchanged.
+
 ## 1.16.8 — 2026-11-19
 
 ### Fixed
