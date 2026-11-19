@@ -12,6 +12,7 @@ Usage (Python is pinned to 3.14 by absolute path; no `py`/PATH lookup):
 Usually run through `tools\pdfcheck.cmd`, which uses the same interpreter.
 
 Exit code 0 when the PDF opens and has a non-empty text layer, 2 otherwise.
+With --strict-layout, layout warnings return 3 before the text-layer check.
 """
 
 from __future__ import annotations
@@ -103,6 +104,8 @@ def main() -> int:
     parser.add_argument("--out", default="", help="directory for rendered pages (default: next to the PDF)")
     parser.add_argument("--dpi", type=int, default=110, help="render resolution (default 110)")
     parser.add_argument("--text", type=int, default=300, help="characters of page 1 to print (default 300)")
+    parser.add_argument("--strict-layout", action="store_true",
+                        help="exit 3 when layout warnings are present")
     args = parser.parse_args()
 
     try:
@@ -151,6 +154,9 @@ def main() -> int:
     layout = layout_warnings(doc, pymupdf)
     if layout:
         print("layout    : " + "; ".join(layout))
+        if args.strict_layout:
+            print("layout    : strict mode -> exit 3")
+            return 3
     else:
         print("layout    : OK (no empty/short/overflow pages)")
     return 0 if full.strip() else 2

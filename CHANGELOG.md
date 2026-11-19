@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.16.13 — 2026-11-19
+
+### Added
+
+- **`pdfcheck --strict-layout`:** returns exit code 3 when layout warnings are present
+  (sparse page, overflow, possible table continuation); `check-report.cmd` forwards the
+  flag unchanged. Useful for CI/automation while the default remains advisory.
+
 ## 1.16.12 — 2026-11-19
 
 ### Changed
