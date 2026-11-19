@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.7, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.8, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.7, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.8, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -145,8 +145,9 @@ checks through `tools\python.cmd` (Python 3.14 with numpy/scipy/sympy/mpmath); b
 `tools\build-report.cmd`, check it with `tools\check-report.cmd <report.pdf>` (PDF+DOCX plus
 `pdfcheck`). A successful build also keeps a version snapshot in `_versions\<timestamp>\` (disable
 with `--no-snapshot`, take a manual one with `tools\snapshot.cmd`; the newest 20 are kept, `--keep N`
-changes that, an identical snapshot is skipped, `--force` creates it anyway). Session artifacts
-(`wolfram-plots\`, `wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never
+changes that, an identical snapshot is skipped; PDF/DOCX bytes do not affect identity, only
+their presence, and `--force` creates it anyway). Session artifacts (`wolfram-plots\`,
+`wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never
 to the repository.
 
 To open the panel manually: right sidebar “+” → Wolfram notebook (the panel registers a guide entry).

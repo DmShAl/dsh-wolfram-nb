@@ -1299,6 +1299,43 @@ test('version-snapshot dedupes identical content and keeps the newest N', (t) =>
   assert.equal(existsSync(join(task, '_versions', 'keepme', 'keep.txt')), true)
 })
 
+test('version-snapshot ignores rebuilt PDF/DOCX bytes when deduplicating', (t) => {
+  const base = mkdtempSync(join(tmpdir(), 'wl-versions-dedup-output-'))
+  t.after(() => rmSync(base, { recursive: true, force: true }))
+  const task = join(base, 'task')
+  mkdirSync(join(task, '_plots'), { recursive: true })
+  writeFileSync(join(task, 'TASK.md'), 'TASK', 'utf8')
+  writeFileSync(join(task, 'report.md'), 'v1', 'utf8')
+  writeFileSync(join(task, 'code.wl'), '(* v1 *)', 'utf8')
+  writeFileSync(join(task, '_plots', 'fig.png'), 'PNG', 'utf8')
+
+  const script = join(process.cwd(), 'workspace', 'tools', 'version-snapshot.mjs')
+  const run = (...args) => spawnSync(process.execPath, [script, task, ...args], { encoding: 'utf8' })
+  const versions = () => readdirSync(join(task, '_versions')).sort()
+
+  assert.equal(run().status, 0)
+  assert.equal(versions().length, 1)
+
+  // Outputs appear: source hash is the same, but output presence differs -> new snapshot.
+  writeFileSync(join(task, 'report.pdf'), 'pdf-1', 'utf8')
+  writeFileSync(join(task, 'report.docx'), 'docx-1', 'utf8')
+  assert.equal(run().status, 0)
+  assert.equal(versions().length, 2)
+
+  // Rebuilding PDF/DOCX changes their bytes but not the source: dedup must skip.
+  writeFileSync(join(task, 'report.pdf'), 'pdf-2-rebuilt', 'utf8')
+  writeFileSync(join(task, 'report.docx'), 'docx-2-rebuilt', 'utf8')
+  const rebuilt = run()
+  assert.equal(rebuilt.status, 0, rebuilt.stderr)
+  assert.match(rebuilt.stdout, /snapshot unchanged/)
+  assert.equal(versions().length, 2)
+
+  // A real source change still creates a snapshot.
+  writeFileSync(join(task, 'report.md'), 'v2', 'utf8')
+  assert.equal(run().status, 0)
+  assert.equal(versions().length, 3)
+})
+
 test('wolfram_job status is short by default and verbose on request', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
   teardown(t, cleanups)

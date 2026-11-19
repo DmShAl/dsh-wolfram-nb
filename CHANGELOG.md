@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.16.8 — 2026-11-19
+
+### Fixed
+
+- **Snapshot dedup no longer treats rebuilt PDF/DOCX as a new version.** `version-snapshot.mjs`
+  compares `TASK.md`, `report.md/.tex`, `*.wl` and `_plots/` by bytes and `report.pdf`/`.docx`
+  only by presence; PDFConv rewrites those binaries on every build even when the source is
+  unchanged. A rebuild with the same sources now prints `snapshot unchanged`; `--force` and
+  retention `--keep` are unchanged.
+
 ## 1.16.7 — 2026-11-19
 
 ### Added

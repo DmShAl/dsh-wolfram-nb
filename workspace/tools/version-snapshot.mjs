@@ -11,8 +11,11 @@
 // snapshot is a sorted, read-only copy.
 //
 // An identical snapshot is not created again ("snapshot unchanged") unless --force is
-// given; --keep N (default 20, env DSH_SNAPSHOT_KEEP) removes the oldest snapshot
-// directories and never touches unrelated entries in _versions/.
+// given. Identity is judged by TASK.md, report.md/.tex, *.wl and _plots/ bytes, plus the
+// presence (not the bytes) of report.pdf/report.docx: PDFConv rewrites those binaries on
+// every build even when the source did not change. --keep N (default 20, env
+// DSH_SNAPSHOT_KEEP) removes the oldest snapshot directories and never touches unrelated
+// entries in _versions/.
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -25,7 +28,7 @@ function usage() {
   console.log('copies TASK.md, report.md/.tex, *.wl, report.pdf/.docx and _plots/')
   console.log('into <task-dir>/_versions/<YYYY_MM_DD-HH_MM_SS>/ (local time, sortable)')
   console.log('--keep N  keep only the newest N snapshots (default 20, env DSH_SNAPSHOT_KEEP)')
-  console.log('--force   create a snapshot even when it is identical to the latest one')
+  console.log('--force   create a snapshot even when source, plots and output presence are identical')
 }
 
 function fail(message) {
@@ -116,13 +119,16 @@ function collectEntries(root, names, plots) {
   return entries
 }
 
-/** Content hash over sorted paths and bytes, so ordering inside the copy does not matter. */
-function contentHash(entries) {
+/** Content hash over sorted paths and bytes, so ordering inside the copy does not matter.
+ *  report.pdf/report.docx are build products: for dedup only their presence matters,
+ *  because PDFConv rewrites them on every build. */
+const OUTPUT_FILES = new Set(['report.pdf', 'report.docx'])
+function contentHash(entries, { ignoreOutputBytes = false } = {}) {
   const hash = createHash('sha256')
   for (const [label, bytes] of entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
     hash.update(label)
     hash.update('\0')
-    hash.update(bytes)
+    if (!(ignoreOutputBytes && OUTPUT_FILES.has(label))) hash.update(bytes)
     hash.update('\0')
   }
   return hash.digest('hex')
@@ -148,7 +154,7 @@ function applyRetention() {
 
 const existing = snapshotDirs()
 const latest = existing.length === 0 ? null : existing[existing.length - 1]
-const currentHash = contentHash(collectEntries(dir, [...files].sort(), hasPlots))
+const currentHash = contentHash(collectEntries(dir, [...files].sort(), hasPlots), { ignoreOutputBytes: true })
 if (!force && latest !== null) {
   const latestDir = join(versionsDir, latest)
   const latestEntries = []
@@ -160,7 +166,7 @@ if (!force && latest !== null) {
     }
   }
   walk(latestDir)
-  if (contentHash(latestEntries) === currentHash) {
+  if (contentHash(latestEntries, { ignoreOutputBytes: true }) === currentHash) {
     console.log(`[version-snapshot] snapshot unchanged: ${latestDir}`)
     applyRetention()
     process.exit(0)
