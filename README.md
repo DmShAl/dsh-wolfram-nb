@@ -6,7 +6,7 @@
 
 - Русская версия — основная (этот файл). English: [README.en.md](README.en.md).
   中文: [README.zh.md](README.zh.md) — исходный текст проекта nashihang777, может отставать.
-- Текущая версия: **1.16.11**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
+- Текущая версия: **1.16.12**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
   установка из локальной сборки — [INSTALL.md](INSTALL.md), выпуск версий — [RELEASING.md](RELEASING.md).
 
 **Требования:** Windows (обнаружение ядра через реестр — только Windows; на macOS/Linux путь
@@ -29,7 +29,7 @@ build-tgz.bat install    :: собрать и установить в профи
 Проверка:
 
 ```
-wolfram_notebook action="status"   →  "Plugin 1.16.11, bridge: 1.3.5 (Mathematica 15.x)"
+wolfram_notebook action="status"   →  "Plugin 1.16.12, bridge: 1.3.5 (Mathematica 15.x)"
 node scripts/smoke.mjs             →  11/11 steps passed
 ```
 

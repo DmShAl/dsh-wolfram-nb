@@ -39,7 +39,8 @@ def layout_warnings(doc, pymupdf):
         text = page.get_text().strip()
         images = page.get_images(full=True)
         if len(text) < 20 and not images:
-            warnings.append(f"page {number}: almost empty")
+            warnings.append(
+                f"page {number}: almost empty (remove the empty appendix/float)")
             body_boxes.append(None)
             rules_by_page.append([])
             continue
@@ -66,7 +67,8 @@ def layout_warnings(doc, pymupdf):
             coverage = box.height / page.rect.height if page.rect.height else 1.0
             if 1 < number < len(doc) and coverage < 0.40:
                 warnings.append(
-                    f"page {number}: body covers only {coverage:.0%} of the page")
+                    f"page {number}: body covers only {coverage:.0%} "
+                    "(remove a sparse appendix or reduce the float)")
         else:
             body_boxes.append(None)
         rules = []
@@ -82,7 +84,9 @@ def layout_warnings(doc, pymupdf):
         bottom = any(rule.y0 > 0.78 * page.rect.height for rule in rules_by_page[index])
         top = any(rule.y0 < 0.22 * next_page.rect.height for rule in rules_by_page[index + 1])
         if bottom and top:
-            warnings.append(f"pages {index + 1}/{index + 2}: possible table continuation")
+            warnings.append(
+                f"pages {index + 1}/{index + 2}: possible table continuation "
+                r"(try \newpage or \small before the table)")
     return warnings
 
 

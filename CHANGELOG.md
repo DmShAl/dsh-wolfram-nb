@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.12 — 2026-11-19
+
+### Changed
+
+- **`pdfcheck` layout warnings now say what to do:** sparse pages suggest removing a
+  sparse appendix/float, and a possible table continuation suggests `\newpage` or
+  `\small` before the table.
+- **Workspace `AGENTS.md` gains a heavy-tail/stable-distribution note:** no KDE on raw
+  heavy tails, calibrate Mathematica vs scipy stable parameterizations, and precompute
+  stable-density tables before plotting/tabulating.
+
 ## 1.16.11 — 2026-11-19
 
 ### Fixed
