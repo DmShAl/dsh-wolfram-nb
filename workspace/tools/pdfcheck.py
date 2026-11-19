@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Quick sanity check for a PDF produced by PDFConv.
+r"""Quick sanity check for a PDF produced by PDFConv.
 
 Prints the page count, the text-layer stats (including Cyrillic), the first
 lines of page 1, and optionally renders pages to PNG for a visual check.

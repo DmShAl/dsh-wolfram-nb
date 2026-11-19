@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.16.4 — 2026-11-19
+
+### Fixed
+
+- **`SyntaxWarning` from `workspace/tools/pdfcheck.py` on Python 3.14.** The module docstring
+  contains the pinned interpreter path `C:\Tools\Scripts\Python314\python.exe`; in a normal
+  string `\T` is an invalid escape sequence, so Python 3.14 printed
+  `SyntaxWarning: "\T" is an invalid escape sequence` (and will make it an error). The docstring
+  is now a raw string (`r"""`), its content is unchanged. Verified with
+  `-W error::SyntaxWarning -m py_compile` (exit 0) and `pdfcheck.cmd` (no warning in stderr).
+  Bridge unchanged at 1.3.5.
+
+### Tests
+
+- 70 tests unchanged — this release touches only a docstring; `npm test` and smoke stay green.
+
 ## 1.16.3 — 2026-11-19
 
 ### Changed
