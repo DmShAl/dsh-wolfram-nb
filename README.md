@@ -6,7 +6,7 @@
 
 - Русская версия — основная (этот файл). English: [README.en.md](README.en.md).
   中文: [README.zh.md](README.zh.md) — исходный текст проекта nashihang777, может отставать.
-- Текущая версия: **1.16.4**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
+- Текущая версия: **1.16.5**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
   установка из локальной сборки — [INSTALL.md](INSTALL.md), выпуск версий — [RELEASING.md](RELEASING.md).
 
 **Требования:** Windows (обнаружение ядра через реестр — только Windows; на macOS/Linux путь
@@ -29,7 +29,7 @@ build-tgz.bat install    :: собрать и установить в профи
 Проверка:
 
 ```
-wolfram_notebook action="status"   →  "Plugin 1.16.4, bridge: 1.3.5 (Mathematica 15.x)"
+wolfram_notebook action="status"   →  "Plugin 1.16.5, bridge: 1.3.5 (Mathematica 15.x)"
 node scripts/smoke.mjs             →  11/11 steps passed
 ```
 
@@ -126,8 +126,10 @@ Git-репозиторий создаётся с первым коммитом �
 глобальный `~/.dsh/AGENTS.md` для расчётов не нужен — на новой машине достаточно плагинов
 `dsh-wolfram-nb` и `dsh-pdfconv`, затем `/initmath`.
 
-Дальше: `node tools\new-task.mjs <имя>`, расчёт инструментами `wolfram_*`, отчёт
-`tools\build-report.cmd`, проверка `tools\pdfcheck.cmd`. Артефакты сессии (`wolfram-plots\`,
+Дальше: `node tools\new-task.mjs <имя> --title "Человеческое название"` — создаёт `TASK.md`,
+`report.md`, `code.wl`, `_plots\`, `_work\`; расчёт инструментами `wolfram_*`; независимая
+проверка через `tools\python.cmd` (Python 3.14: numpy/scipy/sympy/mpmath); отчёт
+`tools\build-report.cmd`, проверка `tools\check-report.cmd report.pdf` (PDF+DOCX и `pdfcheck`). Артефакты сессии (`wolfram-plots\`,
 `wolfram-notebooks\`, `.dsh-wolfram\`) пишутся в каталог сессии, а не в репозиторий.
 
 ## Проверка и сохранение результатов

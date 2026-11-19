@@ -7,7 +7,7 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.16.4** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.16.5** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin remove` + `add file:<tgz>` (сначала удаление: pnpm иначе оставляет файлы
@@ -58,9 +58,10 @@
   На машине есть и вторая установка 3.15 без научного стека; лаунчер `py` теперь указывает
   на неё, поэтому запуск через `py`/`pyw`/`python` из PATH в этом репозитории не используется —
   только полный путь. Научные пакеты: numpy 2.4.6, pandas 3.0.3, scipy 1.18.1,
-  statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2. Также установлены pyarrow 24.0.0,
-  pymupdf 1.28.2, pypdf 6.19.0, python-docx 1.2.0, pyzmq 27.3.0 и другие пакеты; полный
-  список — `C:\Tools\Scripts\Python314\python.exe -m pip list`.
+  statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2, mpmath 1.3.0, sympy 1.14.0.
+  Также установлены pyarrow 24.0.0, pymupdf 1.28.2, pypdf 6.19.0, python-docx 1.2.0,
+  pyzmq 27.3.0 и другие пакеты; полный список —
+  `C:\Tools\Scripts\Python314\python.exe -m pip list`.
   Мост: `ExternalEvaluate[{"Python", "C:/Tools/Scripts/Python314/python.exe"}, "..."]`.
 - R 4.5.3 установлен в `C:\Tools\R\R-4.5.3`; пользователь подтвердил, что RLink работает.
   При необходимости проверь, что активная Mathematica/RLink использует именно эту установку.
@@ -81,7 +82,8 @@
 - `workspace/` — стартовый каталог для расчётных сессий: `AGENTS.md` (инструкции сессии,
   самодостаточные: инструменты, Mathematica, рисунки, отчёты — глобальный `~\.dsh\AGENTS.md`
   для расчётов не нужен),
-  `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `extract-md.cmd`, шаблоны),
+  `tools/` (`new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `check-report.cmd`,
+  `extract-md.cmd`, `python.cmd`, шаблоны; краткая таблица — `tools/README.md`),
   `NOTES.md`, `gitignore` (шаблон `.gitignore`; npm не пропускает файл с точкой в имени,
   `scaffold.js` переименовывает его при копировании). Его копируют в новое место и работают
   там — расчёты в самом репозитории не ведём, чтобы не смешивать код и результаты.

@@ -26,7 +26,7 @@
 | Каталог | Назначение |
 |---|---|
 | `tasks\` | (опционально) хаб задач: `tasks\<задача>\` — `TASK.md`, `code.wl`, `report.md`, `_data\`, `_work\`, `_plots\` |
-| `tools\` | скрипты: `new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `extract-md.cmd`, шаблоны |
+| `tools\` | скрипты: `new-task.mjs`, `build-report.cmd`, `pdfcheck.cmd`, `check-report.cmd`, `extract-md.cmd`, `python.cmd`, шаблоны (см. `tools\README.md`) |
 | `data\` | общие входные данные |
 | `wolfram-plots\` | сессионные графики (в git не коммитятся) |
 | `wolfram-notebooks\` | `.nb`, только при `exportNotebook: true` |
@@ -50,6 +50,8 @@
 | `wolfram_check` | статическая проверка кода до запуска (CodeInspector): синтаксис и подозрительные места, код не вычисляется; в режиме скрипта скрывает шум `SuspiciousSessionSymbol`/`NonASCIICharacter`, `strict: true` — всё |
 | `wolfram_help` | символы: текст справки, `ArgumentsPattern`, опции с умолчаниями — вместо угадывания имён |
 | `wolfram_doc` | раздел «Details» локальной страницы справки — офлайн, без сети |
+| `tools\python.cmd` | Python 3.14 по абсолютному пути: `-c "..."` или скрипт; без `py`/PATH |
+| `tools\check-report.cmd` | `report.pdf` + `report.docx` на месте, затем `pdfcheck.cmd` |
 
 ## Окружение
 
@@ -60,9 +62,10 @@
   Package-X, SciDraw; дистрибутив — `D:\Distr\LLM\HarnessLLM\WolframPackages`.
 - PDFConv: `D:\Projects\PDFConv` (`src\convert.py`), окружение проверяет `pdfconv_check`.
 - Python — **только 3.14 по абсолютному пути**: `C:\Tools\Scripts\Python314\python.exe`
-  (numpy, pandas, scipy, statsmodels, matplotlib, pymupdf) — через `ExternalEvaluate` или
-  напрямую. Лаунчер `py` на этой машине запускает 3.15 без научного стека, поэтому
-  запуск через `py`/`pyw`/`python` из PATH не использовать; те же пути зашиты в `tools\*.cmd`.
+  (numpy, pandas, scipy, statsmodels, matplotlib, pymupdf, mpmath, sympy) — через
+  `ExternalEvaluate`, `tools\python.cmd` или напрямую. Лаунчер `py` на этой машине запускает
+  3.15 без научного стека, поэтому запуск через `py`/`pyw`/`python` из PATH не использовать;
+  те же пути зашиты в `tools\*.cmd`.
 - R 4.5.3: `C:\Tools\R\R-4.5.3` (в `PATH`), RLink через `Needs["RLink`"]`; `InstallR[]`.
 
 ## Правила работы
@@ -92,7 +95,27 @@
 (`report.md`, `report.docx`, `report.pdf`); служебное — `_data\` (входные данные, только
 читать), `_work\` (временные файлы, можно удалять), `_plots\` (финальные рисунки).
 
-Каркас создаётся одной командой: `node tools\new-task.mjs <имя>`.
+Каркас создаётся одной командой: `node tools\new-task.mjs <имя> [--title "Человеческое название"]`
+— создаёт `TASK.md`, `report.md`, `code.wl`, `_plots\`, `_work\`. `--title` задаёт заголовок для
+`TASK.md` и `report.md`; существующую задачу команда не трогает.
+
+## Чек-лист математической задачи
+
+Порядок работы (подробности — в разделах ниже и в `tools\README.md`):
+
+1. `TASK.md` — постановка и допущения; `code.wl` — весь ход решения.
+2. `wolfram_check path="code.wl"` — синтаксис и подозрительные места до запуска.
+3. Запуск: `wolfram_eval` (быстрые шаги) или `wolfram_job` (долгие); полный лог — в
+   `.dsh-wolfram/jobs/<id>.log`.
+4. `wolfram_verify` — identity/ODE/integral для ключевых формул.
+5. Независимая проверка на Python: `tools\python.cmd -c "…"` с `mpmath`/`sympy`/`scipy`
+   (или Monte Carlo) — результат не должен «сойтись сам с собой».
+6. Рисунки — `Export` в `_plots\` задачи (или `wolfram_render`), подписи по-русски.
+7. `report.md` — текст, формулы, рисунки (`![подпись](_plots/fig1.png){width=90%}`).
+8. `tools\build-report.cmd <report.md>` → `report.pdf` + `report.docx`.
+9. `tools\check-report.cmd <report.pdf>` — PDF+DOCX на месте, затем `pdfcheck` (страницы,
+   кириллица, изображения).
+10. Обновить `TASK.md`/`NOTES.md`, затем `git commit` (или `/mathsave "…"`).
 
 ## Отчёты: Markdown + LaTeX → DOCX + PDF
 

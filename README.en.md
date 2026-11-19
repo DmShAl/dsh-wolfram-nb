@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.4, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.5, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.4, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.5, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -139,9 +139,12 @@ refused.
 live in it, so a machine-global `~/.dsh/AGENTS.md` is not needed — a new machine only needs the
 plugins `dsh-wolfram-nb` and `dsh-pdfconv`, then `/initmath`.
 
-Next: `node tools\new-task.mjs <name>`, compute with the `wolfram_*` tools, build the report with
-`tools\build-report.cmd`, check it with `tools\pdfcheck.cmd`. Session artifacts (`wolfram-plots\`,
-`wolfram-notebooks\`, `.dsh-wolfram\`) are written to the session folder, never to the repository.
+Next: `node tools\new-task.mjs <name> --title "Human-readable title"` creates `TASK.md`,
+`report.md`, `code.wl`, `_plots\` and `_work\`; compute with the `wolfram_*` tools; run independent
+checks through `tools\python.cmd` (Python 3.14 with numpy/scipy/sympy/mpmath); build the report with
+`tools\build-report.cmd`, check it with `tools\check-report.cmd <report.pdf>` (PDF+DOCX plus
+`pdfcheck`). Session artifacts (`wolfram-plots\`, `wolfram-notebooks\`, `.dsh-wolfram\`) are
+written to the session folder, never to the repository.
 
 To open the panel manually: right sidebar “+” → Wolfram notebook (the panel registers a guide entry).
 

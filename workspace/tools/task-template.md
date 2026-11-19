@@ -21,9 +21,23 @@
 
 - Что выбрали и почему; что проверили через `wolfram_verify`.
 
+## Проверки
+
+- [ ] `wolfram_check path="code.wl"` — без Fatal/ошибок
+- [ ] `wolfram_verify` — ключевые формулы/identity/ODE проверены
+- [ ] независимая проверка на Python (mpmath/sympy/scipy) или MC
+- [ ] `tools\pdfcheck.cmd report.pdf` — страницы, кириллица, изображения
+- [ ] `tools\check-report.cmd report.pdf` — PDF+DOCX на месте
+
 ## Результаты
 
 - Числа, формулы, ссылки на `report.md`.
+
+## Артефакты
+
+- `report.md` — итоговый отчёт (текст и формулы).
+- `report.pdf`, `report.docx` — сборка рядом с `report.md`.
+- `_plots/` — рисунки, на которые ссылается отчёт.
 
 ## Осталось
 

@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.16.5 — 2026-11-19
+
+Math-workflow release: less manual routine per task, standard checks. Bridge unchanged (1.3.5).
+
+### Added
+
+- **`tools/new-task.mjs --title "…"` and `report.md`.** The command now creates `TASK.md`,
+  `report.md` (from `report-template.md`, title substituted), `code.wl`, `_plots/` and `_work/`;
+  `--title` sets the heading in `TASK.md` and `report.md` (default: the task name). It prints every
+  created file, refuses an existing task directory and keeps the old `node tools/new-task.mjs <name>`
+  form working.
+- **`code.wl` skeleton with six sections**: preparation (`taskDir` from `$InputFileName`, falling
+  back to `Directory[]`), parameters, symbolic solution, numeric check, figures exported into
+  `_plots/`, final `Print`. The comments show `Assuming`, `NIntegrate` and `Export[...,
+  FileNameJoin[{plotsDir, "fig1.png"}]]`; `Get["code.wl"]` works from any directory.
+- **`tools/python.cmd`** — Python 3.14 by absolute path (`DSH_PYTHON` overrides with an absolute
+  path), clear error when missing; used as `tools\python.cmd -c "…"` or `tools\python.cmd script.py`.
+- **`tools/check-report.cmd <report.pdf>`** — verifies that `report.docx` sits next to the PDF,
+  then runs `pdfcheck.cmd` (default `--pages 1`) and forwards its exit code; missing PDF/DOCX → 1,
+  missing `pdfcheck` → 2.
+- **`workspace/tools/README.md`** — a short table of all six tools.
+
+### Changed
+
+- **`task-template.md`**: new «Проверки» checklist (`wolfram_check`, `wolfram_verify`, independent
+  Python/MC check, `pdfcheck`, `check-report`) and an «Артефакты» section with the report paths.
+- **`report-template.md`**: a real figure example `![Краткая подпись](_plots/fig1.png){width=90%}`
+  with the caption rule (alt text is only the caption; LaTeX/PDFConv adds «Рис. N», do not start
+  alt with it) and an optional «Проверки» table (symbolic / numeric-MC / independent Python /
+  PDF check).
+- **`workspace/AGENTS.md`**: new «Чек-лист математической задачи» (ten steps from `TASK.md` to
+  `git commit`), `python.cmd`/`check-report.cmd` in the tool tables, `mpmath`/`sympy` in the
+  Python stack, and `--title` in the task-scaffold line.
+- **Docs**: root `AGENTS.md` (mpmath/sympy, new tools), `README.md`/`README.en.md` quickstart
+  lines for `new-task --title`, `python.cmd` and `check-report.cmd`.
+- All `.cmd` files are ASCII (cp866-safe) with CRLF and no BOM; Python is always the absolute
+  Python 3.14 path.
+
+### Tests
+
+- 70 tests unchanged; smoke 14/14. Manual checks: scaffold in a temp folder with `--title`,
+  `wolfram_check` on the generated `code.wl` (no Fatal), `python.cmd -c "import mpmath, sympy"`,
+  `check-report.cmd` with and without the DOCX, and the repository grep for forbidden Python
+  launchers.
+
 ## 1.16.4 — 2026-11-19
 
 ### Fixed
