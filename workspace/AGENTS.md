@@ -59,8 +59,10 @@
 - Физические пакеты в `%APPDATA%\Wolfram\Applications`: FeynCalc (+FeynArts), xAct,
   Package-X, SciDraw; дистрибутив — `D:\Distr\LLM\HarnessLLM\WolframPackages`.
 - PDFConv: `D:\Projects\PDFConv` (`src\convert.py`), окружение проверяет `pdfconv_check`.
-- Python 3.14: `C:\Tools\Scripts\Python314\python.exe` (numpy, pandas, scipy, statsmodels,
-  matplotlib, pymupdf) — через `ExternalEvaluate` или напрямую.
+- Python — **только 3.14 по абсолютному пути**: `C:\Tools\Scripts\Python314\python.exe`
+  (numpy, pandas, scipy, statsmodels, matplotlib, pymupdf) — через `ExternalEvaluate` или
+  напрямую. Лаунчер `py` на этой машине запускает 3.15 без научного стека, поэтому
+  запуск через `py`/`pyw`/`python` из PATH не использовать; те же пути зашиты в `tools\*.cmd`.
 - R 4.5.3: `C:\Tools\R\R-4.5.3` (в `PATH`), RLink через `Needs["RLink`"]`; `InstallR[]`.
 
 ## Правила работы
@@ -99,7 +101,7 @@
 2. Сборка: `pdfconv_convert { "files": ["<каталог>/report.md"] }` (плагин `dsh-pdfconv`)
    или `tools\build-report.cmd <путь>` (`--check` — окружение, `--no-overwrite` —
    не трогать существующие docx/pdf, код 3). Прямой вызов:
-   `py -3 D:\Projects\PDFConv\src\convert.py --formats docx,pdf <путь>`.
+   `C:\Tools\Scripts\Python314\python.exe D:\Projects\PDFConv\src\convert.py --formats docx,pdf <путь>`.
    Рядом появятся `report.docx` (формулы — редактируемые объекты Word) и `report.pdf`.
    Существующие результаты по умолчанию не перезаписываются — нужен `overwrite: true`.
 3. Проверка: `tools\pdfcheck.cmd report.pdf --pages 1,3 --out _work` — страницы, объём

@@ -4,10 +4,12 @@
 Prints the page count, the text-layer stats (including Cyrillic), the first
 lines of page 1, and optionally renders pages to PNG for a visual check.
 
-Usage:
-    python tools/pdfcheck.py report.pdf
-    python tools/pdfcheck.py report.pdf --pages 1,3,5 --out _work
-    python tools/pdfcheck.py report.pdf --dpi 110 --text 400
+Usage (Python is pinned to 3.14 by absolute path; no `py`/PATH lookup):
+    C:\Tools\Scripts\Python314\python.exe tools\pdfcheck.py report.pdf
+    C:\Tools\Scripts\Python314\python.exe tools\pdfcheck.py report.pdf --pages 1,3,5 --out _work
+    C:\Tools\Scripts\Python314\python.exe tools\pdfcheck.py report.pdf --dpi 110 --text 400
+
+Usually run through `tools\pdfcheck.cmd`, which uses the same interpreter.
 
 Exit code 0 when the PDF opens and has a non-empty text layer, 2 otherwise.
 """

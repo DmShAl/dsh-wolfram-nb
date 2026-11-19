@@ -7,12 +7,12 @@
 
 - Профиль: `desktop`, `DSH_HOME=C:\Users\shepe\.dsh`.
 - CLI: `C:\Tools\DSH\resources\runtime\cli\bin\dsh.cmd`.
-- Плагин `dsh-wolfram-nb` **1.16.2** установлен в профиль
+- Плагин `dsh-wolfram-nb` **1.16.3** установлен в профиль
   (зависимость + запись в `dsh.profile.bundles`).
 - Сборка/установка из репозитория: `build-tgz.bat` → tgz, `build-tgz.bat install` →
   `dsh plugin remove` + `add file:<tgz>` (сначала удаление: pnpm иначе оставляет файлы
   прежней сборки с тем же номером версии). Подробности в `INSTALL.md`.
-- Тесты: `npm test` (node --test, живое ядро, 69 тестов, ~125 с); приёмка установленной
+- Тесты: `npm test` (node --test, живое ядро, 70 тестов, ~129 с); приёмка установленной
   сборки — `node scripts/smoke.mjs` (14 шагов, ~12 с). `npm.cmd` доступен
   (`C:\Program Files\nodejs`), Node v24.21.0.
 - Ядра стартуют в UTF-8 (`bridge.wl`, переопределяется `DSH_WOLFRAM_CHARACTER_ENCODING`).
@@ -54,10 +54,13 @@
 
 ## Python и R
 
-- Python 3.14: `C:\Tools\Scripts\Python314\python.exe`; научные пакеты: numpy 2.4.6,
-  pandas 3.0.3, scipy 1.18.1, statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2.
-  Также установлены pyarrow 24.0.0, pymupdf 1.28.2, pypdf 6.19.0, python-docx 1.2.0,
-  pyzmq 27.3.0 и другие пакеты; полный список можно получить через `python.exe -m pip list`.
+- Python — **только 3.14 по абсолютному пути**: `C:\Tools\Scripts\Python314\python.exe`.
+  На машине есть и вторая установка 3.15 без научного стека; лаунчер `py` теперь указывает
+  на неё, поэтому запуск через `py`/`pyw`/`python` из PATH в этом репозитории не используется —
+  только полный путь. Научные пакеты: numpy 2.4.6, pandas 3.0.3, scipy 1.18.1,
+  statsmodels 0.15.0, matplotlib 3.11.2, formulaic 1.2.2. Также установлены pyarrow 24.0.0,
+  pymupdf 1.28.2, pypdf 6.19.0, python-docx 1.2.0, pyzmq 27.3.0 и другие пакеты; полный
+  список — `C:\Tools\Scripts\Python314\python.exe -m pip list`.
   Мост: `ExternalEvaluate[{"Python", "C:/Tools/Scripts/Python314/python.exe"}, "..."]`.
 - R 4.5.3 установлен в `C:\Tools\R\R-4.5.3`; пользователь подтвердил, что RLink работает.
   При необходимости проверь, что активная Mathematica/RLink использует именно эту установку.

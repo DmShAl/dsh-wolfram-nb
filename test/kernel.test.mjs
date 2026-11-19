@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, unlinkSync, existsSync, writeFileSync, readdirSync } from 'node:fs'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { apply } from '../index.js'
 import { initMathWorkspace, isInsideRepository, checkEnvironment, initGitRepository, gitSnapshot } from '../scaffold.js'
@@ -565,6 +565,24 @@ test('checkEnvironment reports the components a calculation needs', (t) => {
   // Node runs the plugin, so it is always found; the kernel was found by the tests above.
   assert.equal(items.find((item) => item.name === 'Node').ok, true)
   assert.equal(items.find((item) => item.name === 'Mathematica').ok, true)
+})
+
+test('checkEnvironment pins Python 3.14 by absolute path', (t) => {
+  // The `py` launcher resolves to 3.15 on this machine (no scientific stack), so a PATH
+  // would silently pick the wrong interpreter; the check must report the fixed path.
+  const expected = typeof process.env.DSH_PYTHON === 'string' && process.env.DSH_PYTHON.trim() !== ''
+    ? process.env.DSH_PYTHON.trim()
+    : 'C:\\Tools\\Scripts\\Python314\\python.exe'
+  if (!isAbsolute(expected)) {
+    const item = checkEnvironment().find((component) => component.name === 'Python')
+    assert.equal(item.ok, false)
+    assert.match(item.detail, /absolute path/)
+    return
+  }
+  if (!existsSync(expected)) return t.skip(`no Python at ${expected}`)
+  const item = checkEnvironment().find((component) => component.name === 'Python')
+  assert.equal(item.ok, true)
+  assert.equal(item.detail, expected)
 })
 
 test('wolfram_doc reads the local reference page', async (t) => {

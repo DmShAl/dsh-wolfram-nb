@@ -6,5 +6,5 @@ LaTeX-отчётом. Итог — `report.tex` и `report.pdf`; рисунки 
 Пересборка PDF через PDFConv (относительные `_plots/` поддерживаются):
 
 ```cmd
-py -3 D:\Projects\PDFConv\src\convert.py --formats pdf tasks\lorenz-example\report.tex
+C:\Tools\Scripts\Python314\python.exe D:\Projects\PDFConv\src\convert.py --formats pdf tasks\lorenz-example\report.tex
 ```

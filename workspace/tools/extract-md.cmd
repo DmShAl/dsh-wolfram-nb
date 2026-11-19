@@ -12,8 +12,15 @@ rem Markdown already exists and --force was not given.
 setlocal EnableExtensions EnableDelayedExpansion
 set "PDFCONV=D:\Projects\PDFConv\src\convert.py"
 
-where py >nul 2>nul
-if errorlevel 1 (set "PY=python") else (set "PY=py -3")
+rem Python is pinned to 3.14 by absolute path: the `py` launcher resolves to 3.15 here
+rem (no scientific stack) and a PATH lookup would silently pick the wrong interpreter.
+set "PY=C:\Tools\Scripts\Python314\python.exe"
+if defined DSH_PYTHON set "PY=%DSH_PYTHON%"
+if not exist "%PY%" (
+    echo [extract-md] Python 3.14 not found: %PY%
+    echo Install Python 3.14 or set DSH_PYTHON to an absolute python.exe path.
+    exit /b 1
+)
 
 set "FORCE="
 set "FILES="

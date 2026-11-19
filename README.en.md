@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.2, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.3, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.2, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.3, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -41,7 +41,9 @@ older build when the version number did not change. Restart DSH completely after
 for the local flow.
 
 The target machine needs Windows and a REPL-capable `math.exe` (Mathematica, or a Wolfram Engine
-installation that ships one).
+installation that ships one). Report building uses Python **3.14** by absolute path
+(`C:\Tools\Scripts\Python314\python.exe`); the scripts have no `py` launcher and no PATH fallback,
+because that launcher resolves to 3.15 (without the scientific stack) on this machine.
 
 The release flow for this fork (version bump, tests, build, tag, push) is documented in
 [RELEASING.md](RELEASING.md).
@@ -269,7 +271,7 @@ reload the plugin (in this repository that is done by toggling its enabled state
 
 Tests and checks:
 
-- `npm test` — 69 cases against the real kernel, about 125 s.
+- `npm test` — 70 cases against the real kernel, about 129 s.
 - `node scripts/smoke.mjs` — boots the plugin and calls every tool once (~10 s); use it to accept a
   build after installing. `--with-alpha` adds the Wolfram|Alpha call (needs a network).
 - `build-tgz.bat` validates that `package.json` is clean UTF-8 JSON before packing: PowerShell's

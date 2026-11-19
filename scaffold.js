@@ -10,7 +10,7 @@
 // command line and from inside a session.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { resolveKernel } from './kernel-discovery.js'
@@ -136,13 +136,24 @@ export function checkEnvironment() {
   const pdfconv = findPdfConv()
   items.push({ name: 'PDFConv', ok: ! /not found/.test(pdfconv.detail), detail: pdfconv.detail })
 
-  const python = firstExisting([process.env.DSH_PYTHON, 'C:\\Tools\\Scripts\\Python314\\python.exe'])
-    ?? findOnPath(['python.exe', 'python3.exe'])
-  items.push({
-    name: 'Python',
-    ok: python !== null,
-    detail: python ?? 'python not found (set DSH_PYTHON or add it to PATH)',
-  })
+  // Python is pinned to 3.14 by absolute path. The `py` launcher resolves to 3.15 here
+  // (no scientific stack) and a PATH lookup would silently pick the wrong interpreter,
+  // so there is deliberately no fallback: DSH_PYTHON (absolute) or the fixed path.
+  const pythonFallback = 'C:\\Tools\\Scripts\\Python314\\python.exe'
+  const pythonEnv = typeof process.env.DSH_PYTHON === 'string' && process.env.DSH_PYTHON.trim() !== ''
+    ? process.env.DSH_PYTHON.trim()
+    : null
+  let python = null
+  let pythonDetail
+  if (pythonEnv !== null && !isAbsolute(pythonEnv)) {
+    pythonDetail = `DSH_PYTHON must be an absolute path: ${pythonEnv}`
+  } else {
+    python = firstExisting(pythonEnv !== null ? [pythonEnv] : [pythonFallback])
+    pythonDetail = python ?? (pythonEnv !== null
+      ? `Python not found at ${pythonEnv} (from DSH_PYTHON); point DSH_PYTHON at an absolute python.exe`
+      : `Python 3.14 not found at ${pythonFallback}; install Python 3.14 or set DSH_PYTHON to an absolute python.exe path`)
+  }
+  items.push({ name: 'Python', ok: python !== null, detail: pythonDetail })
 
   const latex = firstExisting([
     'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe',

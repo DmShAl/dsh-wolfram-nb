@@ -6,12 +6,14 @@
 
 - Русская версия — основная (этот файл). English: [README.en.md](README.en.md).
   中文: [README.zh.md](README.zh.md) — исходный текст проекта nashihang777, может отставать.
-- Текущая версия: **1.16.2**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
+- Текущая версия: **1.16.3**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
   установка из локальной сборки — [INSTALL.md](INSTALL.md), выпуск версий — [RELEASING.md](RELEASING.md).
 
 **Требования:** Windows (обнаружение ядра через реестр — только Windows; на macOS/Linux путь
 задаётся вручную), установленная Mathematica или Wolfram Engine, DSH, `node`/`npm.cmd` в `PATH`.
-Плагин не поставляет и не перераспространяет Wolfram-компоненты.
+Для сборки отчётов — Python **3.14** по абсолютному пути `C:\Tools\Scripts\Python314\python.exe`
+(в скриптах нет лаунчера `py` и PATH-фолбэков: на этой машине он запускает 3.15 без научного
+стека). Плагин не поставляет и не перераспространяет Wolfram-компоненты.
 
 ## Установка
 
@@ -27,7 +29,7 @@ build-tgz.bat install    :: собрать и установить в профи
 Проверка:
 
 ```
-wolfram_notebook action="status"   →  "Plugin 1.16.2, bridge: 1.3.5 (Mathematica 15.x)"
+wolfram_notebook action="status"   →  "Plugin 1.16.3, bridge: 1.3.5 (Mathematica 15.x)"
 node scripts/smoke.mjs             →  11/11 steps passed
 ```
 
@@ -255,7 +257,7 @@ JSON запроса пишется чистым ASCII (не-ASCII экранир
 
 Проверки:
 
-- `npm test` — 69 тестов против живого ядра, ~125 с;
+- `npm test` — 70 тестов против живого ядра, ~129 с;
 - `node scripts/smoke.mjs` — поднимает плагин и вызывает каждый инструмент (~10 с); приёмка после
   установки, `--with-alpha` добавляет запрос к Wolfram|Alpha (нужна сеть);
 - `build-tgz.bat` проверяет, что `package.json` — чистый UTF-8 без BOM (PowerShell `Set-Content

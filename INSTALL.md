@@ -24,7 +24,7 @@ build-tgz.bat install    :: собрать и установить в профи
 Проверка:
 
 ```
-wolfram_notebook action="status"   →  Plugin 1.16.2, bridge: 1.3.5 (Mathematica 15.x)
+wolfram_notebook action="status"   →  Plugin 1.16.3, bridge: 1.3.5 (Mathematica 15.x)
 node scripts/smoke.mjs             →  11/11 steps passed
 ```
 
@@ -95,7 +95,7 @@ pnpm удалит пакет из зависимостей; запись `dsh-wo
 
 ```bat
 npm pack
-dsh plugin --profile desktop add "file:%CD%\dsh-wolfram-nb-1.15.0.tgz"
+dsh plugin --profile desktop add "file:%CD%\dsh-wolfram-nb-1.16.3.tgz"
 ```
 
 Или в GUI: **Plugins → Add plugin** → каталог этого репозитория. Пакет

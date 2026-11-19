@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.16.3 — 2026-11-19
+
+### Changed
+
+- **Python is pinned to 3.14 by absolute path (bridge unchanged, 1.3.5).** The `py` launcher
+  resolves to a bare 3.15 installation on this machine (no scientific stack), while 3.14 with
+  numpy/scipy/pandas/matplotlib/pymupdf lives at `C:\Tools\Scripts\Python314\python.exe`. Every
+  Python run in the repository now uses that absolute path — no `py`/`pyw` launcher and no PATH
+  lookup:
+  - `workspace/tools/build-report.cmd`, `extract-md.cmd`, `pdfcheck.cmd` set
+    `PY=C:\Tools\Scripts\Python314\python.exe` (an absolute `DSH_PYTHON` overrides it) and stop
+    with a clear message when the interpreter is missing, instead of falling back to `python`;
+  - `scaffold.js checkEnvironment` reports the Python path without a PATH fallback and rejects a
+    relative `DSH_PYTHON`; `findOnPath` is kept for `pdflatex` only;
+  - docs: root and `workspace/AGENTS.md` (new rule "Python — only the absolute 3.14 path"),
+    `README.md`, `README.en.md`, `examples/lorenz-example/TASK.md`, `pdfcheck.py` docstring.
+
+### Tests
+
+- 70 tests: `checkEnvironment` must report the fixed Python 3.14 path (or an explicit
+  `DSH_PYTHON` absolute-path error), never a PATH candidate.
+
 ## 1.16.2 — 2026-11-19
 
 ### Fixed
