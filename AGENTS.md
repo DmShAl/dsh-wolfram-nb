@@ -73,7 +73,7 @@
 - `wolfram_state clear` чистит только Global-имена без `$`.
 - `wolfram_verify identity` сначала пробует `Simplify[lhs-rhs, assumptions]`.
 - `wolfram_job` публикует графику в панель; `wolfram_batch` — параллельные ядра.
-- Пример отчёта: `examples/lorenz-example/report.pdf` (LaTeX, формулы, 2D/3D-графики).
+- Пример отчёта: `workspace/tools/report-template.md` (LaTeX, формулы, рисунки; готовый отчёт — в задаче).
 
 ## Структура репозитория
 
@@ -90,10 +90,10 @@
   там — расчёты в самом репозитории не ведём, чтобы не смешивать код и результаты.
 - `scaffold.js` + `InitMath.cmd` + команда `/initmath` — подготовка такой папки одной командой;
   папку внутри репозитория `scaffold.js` отклоняет.
-- `examples/` — готовые задачи как образцы (`bathtub-vortex`, `ode-second-order`,
-  `lorenz-example`): `TASK.md`, отчёт MD/TeX, сборка DOCX/PDF, `_plots/`.
+- `examples/` в репозитории нет: он содержит только код, тесты и шаблон; готовые
+  демонстрационные задачи вынесены в приватный архив рядом с репозиторием.
 - В npm-пакет (`files` в `package.json`) входят `workspace/` и `scaffold.js` (нужны `/initmath`
-  в установленной копии), но не `examples/`.
+  в установленной копии); демонстрационные задачи в пакет не входят.
 - `D:\Projects\LLM\Hardness\dsh-wolfram-nb_Priv\notes\` — приватные заметки (LEDGER, журналы
   сессий). Живут рядом с репозиторием и внутрь не переносятся: публичный checkout не должен
   получить их случайно.
