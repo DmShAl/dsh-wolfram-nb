@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.14, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.15, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.14, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.15, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with

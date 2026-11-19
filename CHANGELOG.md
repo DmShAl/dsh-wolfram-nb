@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.16.15 — 2026-11-19
+
+### Added
+
+- **`workspace/tools/stable-params.md`:** Mathematica type1 ↔ scipy S1 mapping,
+  the scale $c=\cos^{1/\alpha}(\pi\alpha/2)$ between S1 and the Laplace-normalized
+  positive stable, closed moment/`f_Y(0)` formulas, and a precompute-table-before-Plot
+  recipe.
+
 ## 1.16.14 — 2026-11-19
 
 ### Added
