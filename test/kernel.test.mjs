@@ -1336,6 +1336,28 @@ test('version-snapshot ignores rebuilt PDF/DOCX bytes when deduplicating', (t) =
   assert.equal(versions().length, 3)
 })
 
+test('short job status truncates long progress lines', async (t) => {
+  const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
+  teardown(t, cleanups)
+  const job = tools.get('wolfram_job')
+  const submitted = await job.execute({
+    action: 'submit',
+    code: 'Print[StringRepeat["x", 400]]; Pause[10]',
+  }, {})
+  let status = null
+  for (let i = 0; i < 40; i += 1) {
+    status = await job.execute({ action: 'status', id: submitted.jobId }, {})
+    if (status.summary.includes('Recent output')) break
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  if (status.summary.includes('Recent output')) {
+    const progress = status.summary.split('\n').filter((line) => line.includes('xxx'))
+    assert.ok(progress.length > 0)
+    assert.ok(progress.every((line) => line.length <= 160))
+  }
+  await job.execute({ action: 'cancel', id: submitted.jobId }, {})
+})
+
 test('wolfram_job status is short by default and verbose on request', async (t) => {
   const { tools, cleanups } = makeHarness({ timeoutMs: 120_000 })
   teardown(t, cleanups)

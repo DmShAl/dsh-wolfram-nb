@@ -23,7 +23,7 @@ the right side of the conversation.
 
 ## Install and distribution
 
-This fork is built and installed locally (version 1.16.9, bridge 1.3.5):
+This fork is built and installed locally (version 1.16.10, bridge 1.3.5):
 
 ```bat
 build-tgz.bat            :: build the tarball
@@ -32,7 +32,7 @@ build-tgz.bat install    :: build and install it into the desktop profile
 
 `build-tgz.bat install` removes the previous version first: pnpm otherwise keeps the files of an
 older build when the version number did not change. Restart DSH completely afterwards. Check with
-`wolfram_notebook action="status"` (`Plugin 1.16.9, bridge: 1.3.5`) or `node scripts/smoke.mjs`
+`wolfram_notebook action="status"` (`Plugin 1.16.10, bridge: 1.3.5`) or `node scripts/smoke.mjs`
 (14/14).
 
 **From a clone:** install the clone directory as a bundle with
@@ -54,7 +54,7 @@ The release flow for this fork (version bump, tests, build, tag, push) is docume
 |---|---|
 | `wolfram_eval` | Evaluates arbitrary Wolfram Language in a persistent local kernel (one or many cells): symbolic algebra, calculus, equation solving, matrices, units, data handling, file import/export, and more. A long console is cut at 1500 characters and kept whole in `.dsh-wolfram/tmp/last-console.log`; `fullConsole: true` returns it in full. Accepts `code`, `cells` or a `path` to a `.wl` file: `path` runs as `Get[<file>]` in the persistent kernel, with no manual escaping |
 | `wolfram_notebook` | `open` renders an existing `.nb`; `reset` restarts the kernel; `status` reports kernel state |
-| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`log`/`list` manage jobs, `status` shows the latest `Print` output, `result` accepts `wait` (up to 300 s) and `full: true` (whole console), `action="log"` reads the log. Every finished job always writes `.dsh-wolfram/jobs/<id>.log` and the path is in the summary; graphics results are published to the panel. `submit` accepts `code`, `cells` or `path` (`.wl`, via `Get`); `status` is a short summary by default (state, elapsed, the last 4 progress lines, log path), `verbose: true` shows the full list |
+| `wolfram_job` | `submit` runs a long computation in its own kernel (30 min default); `status`/`result`/`cancel`/`log`/`list` manage jobs, `status` shows the latest `Print` output, `result` accepts `wait` (up to 300 s) and `full: true` (whole console), `action="log"` reads the log. Every finished job always writes `.dsh-wolfram/jobs/<id>.log` and the path is in the summary; graphics results are published to the panel. `submit` accepts `code`, `cells` or `path` (`.wl`, via `Get`); `status` is a short summary by default (state, elapsed, the last 4 progress lines shortened to 160 chars, log path), `verbose: true` shows the full list |
 | `wolfram_verify` | Independent checks in a throwaway kernel (session definitions cannot skew them): `identity` proves `FullSimplify[lhs-rhs, assumptions]` symbolically, then samples numerically; `ode` simplifies the residual and checks optional initial/boundary `conditions`; `integral` compares with its closed form; `antiderivative` differentiates the claimed antiderivative. Each result carries `status`: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
 | `wolfram_alpha` | Asks Wolfram|Alpha a natural-language query and returns the answer; with `steps` (default `true`) it requests the step-by-step solution when the service offers one and falls back to the plain answer otherwise; `maxChars` (default 4000) caps the answer and says when it was clipped. Requires internet access |
 | `wolfram_state` | `status` reports Global symbols, memory, `$Assumptions` and packages; `symbols` lists defined symbols (no temporary `$` names); `save`/`load` persist the Global context (load defaults to the newest save); `clear` drops it |

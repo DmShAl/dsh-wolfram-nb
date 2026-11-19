@@ -6,7 +6,7 @@
 
 - Русская версия — основная (этот файл). English: [README.en.md](README.en.md).
   中文: [README.zh.md](README.zh.md) — исходный текст проекта nashihang777, может отставать.
-- Текущая версия: **1.16.9**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
+- Текущая версия: **1.16.10**, bridge `1.3.5`. История изменений — [CHANGELOG.md](CHANGELOG.md),
   установка из локальной сборки — [INSTALL.md](INSTALL.md), выпуск версий — [RELEASING.md](RELEASING.md).
 
 **Требования:** Windows (обнаружение ядра через реестр — только Windows; на macOS/Linux путь
@@ -29,7 +29,7 @@ build-tgz.bat install    :: собрать и установить в профи
 Проверка:
 
 ```
-wolfram_notebook action="status"   →  "Plugin 1.16.9, bridge: 1.3.5 (Mathematica 15.x)"
+wolfram_notebook action="status"   →  "Plugin 1.16.10, bridge: 1.3.5 (Mathematica 15.x)"
 node scripts/smoke.mjs             →  11/11 steps passed
 ```
 
@@ -44,7 +44,7 @@ node scripts/smoke.mjs             →  11/11 steps passed
 |---|---|
 | `wolfram_eval` | Выполняет код Wolfram Language в постоянном ядре (одна клетка или несколько): алгебра, анализ, уравнения, матрицы, единицы, данные, импорт/экспорт файлов. Длинный вывод консоли сокращается до 1500 символов, полный текст остаётся в `.dsh-wolfram/tmp/last-console.log`; `fullConsole: true` возвращает его целиком. Принимает `code`, `cells` или `path` к `.wl`-файлу: `path` выполняется как `Get[<файл>]` в постоянном ядре, без ручного экранирования |
 | `wolfram_notebook` | `open` — показать существующий `.nb`; `reset` — перезапустить ядро; `status` — путь ядра, версия плагина и bridge, счётчики |
-| `wolfram_job` | `submit` — долгий расчёт в отдельном ядре (30 мин по умолчанию); `status`/`result`/`cancel`/`log`/`list`; `status` показывает последние `Print`, `result` умеет `wait` (секунды, до 300) и `full: true` (весь console), `action="log"` читает полный лог. Каждая завершённая задача всегда пишет лог в `.dsh-wolfram/jobs/<id>.log`, путь виден в summary. `submit` принимает `code`, `cells` или `path` (`.wl`, через `Get`); `status` по умолчанию — короткая сводка (состояние, время, последние 4 строки прогресса, путь к логу), `verbose: true` — подробный список |
+| `wolfram_job` | `submit` — долгий расчёт в отдельном ядре (30 мин по умолчанию); `status`/`result`/`cancel`/`log`/`list`; `status` показывает последние `Print`, `result` умеет `wait` (секунды, до 300) и `full: true` (весь console), `action="log"` читает полный лог. Каждая завершённая задача всегда пишет лог в `.dsh-wolfram/jobs/<id>.log`, путь виден в summary. `submit` принимает `code`, `cells` или `path` (`.wl`, через `Get`); `status` по умолчанию — короткая сводка (состояние, время, последние 4 строки прогресса, путь к логу; строки обрезаются до 160 символов), `verbose: true` — подробный список |
 | `wolfram_verify` | Независимая проверка в одноразовом ядре (определения сессии не влияют): `identity` — `FullSimplify[lhs-rhs, assumptions]`, затем численная выборка; `ode` — невязка решения + краевые условия; `integral` — сверка с замкнутой формой; `antiderivative` — дифференцирование заявленной первообразной. Статусы: `verified_symbolic` / `numerically_consistent` / `falsified` / `inconclusive` |
 | `wolfram_alpha` | Запрос к Wolfram\|Alpha; `steps` (по умолчанию `true`) — пошаговое решение, если сервис его предлагает; `maxChars` (по умолчанию 4000) ограничивает объём и сообщает, если ответ обрезан. Нужен интернет |
 | `wolfram_state` | `status` — Global-символы, память, `$Assumptions`, пакеты; `symbols` — определённые имена; `save` — `DumpSave` в `.dsh-wolfram/state-<время>.mx`; `load` — восстановить последнее сохранение или файл `path`; `clear` — очистить Global |

@@ -4,4 +4,5 @@ wolfram-notebooks/
 wolfram-plots/
 _work/
 tasks/**/_work/
+tasks/**/_versions/
 *.latex.log

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.16.10 — 2026-11-19
+
+### Added
+
+- **Layout diagnostics in `pdfcheck.py`.** It now prints `layout : OK` or flags
+  almost-empty pages, pages whose content covers <15% of the page, and images extending
+  outside the page — the failures that used to require manual PNG inspection.
+- **Report template defaults for stable PDFs.** `report-template.md` starts with
+  `float` + `\floatplacement{figure}{H}` and recommends 60–70% figure widths.
+
+### Changed
+
+- **`_versions/` is ignored by the workspace `.gitignore` by default** (`tasks/**/_versions/`);
+  the archive stays on disk. Remove the line if a task should commit versions.
+- **Short `wolfram_job status` truncates each of the last 4 progress lines to 160 chars**;
+  `verbose: true` still shows the full list.
+
 ## 1.16.9 — 2026-11-19
 
 ### Changed

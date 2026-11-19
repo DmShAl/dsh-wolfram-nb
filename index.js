@@ -1178,7 +1178,9 @@ export function apply(ctx, config = {}) {
           // Short by default: the log file has the rest. verbose restores the old list.
           const lines = verbose ? 10 : 4
           const label = verbose ? 'Progress' : 'Recent output'
-          extra = `\n${label}:\n${job.progress.slice(-lines).join('\n')}`
+          const shown = job.progress.slice(-lines).map((line) => (
+            verbose || line.length <= 160 ? line : `${line.slice(0, 157)}...`))
+          extra = `\n${label}:\n${shown.join('\n')}`
         }
         if (job.logPath !== null) extra += `\nLog: ${displayPath(job.cwd, job.logPath)}`
         return { ok: true, summary: `Job ${job.id}: ${job.status} (${elapsed} s).${suffix}${extra}`, jobId: job.id }
