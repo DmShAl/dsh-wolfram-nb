@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.11 — 2026-11-19
+
+### Fixed
+
+- **`pdfcheck` layout heuristics are less noisy and catch more.** Body coverage now
+  ignores a bare page number in the footer, a sparse final page is allowed (it is often
+  just the answer/notation), a low-coverage page is reported otherwise, and wide horizontal
+  rules touching the bottom of one page and the top of the next are reported as a
+  **possible table continuation** (the LaTeX longtable split). All six project reports
+  pass `layout : OK`.
+
 ## 1.16.10 — 2026-11-19
 
 ### Added

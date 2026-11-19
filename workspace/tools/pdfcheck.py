@@ -26,37 +26,63 @@ def cyrillic_count(text: str) -> int:
 
 
 def layout_warnings(doc, pymupdf):
-    """Cheap layout diagnostics: nearly empty pages, low coverage, page overflow.
+    """Cheap layout diagnostics: nearly empty pages, low body coverage, overflow, split tables.
 
-    This does not try to reconstruct LaTeX floats; it catches the common
-    report-template failures (empty page after a float, content squeezed into
-    a corner, image wider than the page) before a human looks at renders.
+    The body coverage excludes a bare page number in the footer. A wide horizontal
+    rule at the bottom of one page and another at the top of the next is reported as
+    a possible longtable continuation — the common LaTeX table split.
     """
     warnings = []
+    body_boxes = []
+    rules_by_page = []
     for number, page in enumerate(doc, 1):
         text = page.get_text().strip()
         images = page.get_images(full=True)
         if len(text) < 20 and not images:
             warnings.append(f"page {number}: almost empty")
+            body_boxes.append(None)
+            rules_by_page.append([])
             continue
         rects = []
         for block in page.get_text("blocks"):
-            if len(block) >= 5 and str(block[4]).strip():
-                rects.append(pymupdf.Rect(block[:4]))
+            if len(block) < 5 or not str(block[4]).strip():
+                continue
+            label = str(block[4]).strip()
+            # A bare page number in the footer is not body content.
+            if block[1] > 0.90 * page.rect.height and label.isdigit():
+                continue
+            rects.append(pymupdf.Rect(block[:4]))
         for image in images:
             for rect in page.get_image_rects(image[0]):
                 rects.append(rect)
                 if (rect.x0 < page.rect.x0 - 1 or rect.y0 < page.rect.y0 - 1
                         or rect.x1 > page.rect.x1 + 1 or rect.y1 > page.rect.y1 + 1):
                     warnings.append(f"page {number}: image extends outside the page")
-        if rects and number > 1:
+        if rects:
             box = rects[0]
             for rect in rects[1:]:
                 box.include_rect(rect)
+            body_boxes.append(box)
             coverage = box.height / page.rect.height if page.rect.height else 1.0
-            if coverage < 0.15:
+            if 1 < number < len(doc) and coverage < 0.40:
                 warnings.append(
-                    f"page {number}: content covers only {coverage:.0%} of the page")
+                    f"page {number}: body covers only {coverage:.0%} of the page")
+        else:
+            body_boxes.append(None)
+        rules = []
+        for drawing in page.get_drawings():
+            rect = drawing.get("rect")
+            if rect is not None and rect.height < 2 and rect.width > 0.25 * page.rect.width:
+                rules.append(rect)
+        rules_by_page.append(rules)
+
+    for index in range(len(doc) - 1):
+        page = doc[index]
+        next_page = doc[index + 1]
+        bottom = any(rule.y0 > 0.78 * page.rect.height for rule in rules_by_page[index])
+        top = any(rule.y0 < 0.22 * next_page.rect.height for rule in rules_by_page[index + 1])
+        if bottom and top:
+            warnings.append(f"pages {index + 1}/{index + 2}: possible table continuation")
     return warnings
 
 
