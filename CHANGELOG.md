@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.16.14 — 2026-11-19
+
+### Added
+
+- **`workspace/tools/heavy_tail.wl`:** `HeavyTailPlot` (log-log empirical survival
+  with binomial bands), `HeavyTailSlope` (log-log tail regression), and
+  `HeavyTailLogDensity` (log-binned density) for heavy-tailed samples without KDE.
+  Documented in `tools/README.md` and `AGENTS.md`.
+
 ## 1.16.13 — 2026-11-19
 
 ### Added

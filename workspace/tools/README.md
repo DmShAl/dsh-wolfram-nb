@@ -13,6 +13,7 @@ Windows (текст только ASCII), Python — всегда абсолют�
 | `tools\extract-md.cmd <file.docx>` | Обратное направление: DOCX → Markdown + LaTeX. Без `--force` не перезаписывает существующий `.md`. |
 | `tools\snapshot.cmd <task-dir> [--keep N] [--force]` | Ручной снимок текущей версии задачи в `_versions\<timestamp>\` (то же, что делает `build-report`): `TASK.md`, `report.md/.tex`, `*.wl`, `report.pdf/.docx`, `_plots/`. Идентичный по исходникам/`_plots` снимок пропускается (наличие PDF/DOCX учитывается, их байты — нет), `--force` создаёт принудительно, `--keep N` оставляет N последних (по умолчанию 20). |
 | `tools\python.cmd ...` | Запускает Python 3.14 по абсолютному пути: `tools\python.cmd -c "import sympy; print(sympy.__version__)"` или `tools\python.cmd script.py`. |
+| `tools\heavy_tail.wl` | Диагностика тяжёлых хвостов без KDE: `Get["tools\\heavy_tail.wl"]`, затем `HeavyTailPlot[data]` (log-log survival с биномиальными полосами), `HeavyTailSlope[data, 0.1]`, `HeavyTailLogDensity[data]`. |
 
 `build-report`, `pdfcheck`, `check-report` и `python` используют один и тот же интерпретатор
 (Python 3.14; `DSH_PYTHON` переопределяет путь, если он абсолютный). Лаунчеры `py`/`pyw` и
